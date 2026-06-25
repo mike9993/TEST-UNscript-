@@ -89,6 +89,8 @@ local cfgNotifEnabled    = savedCfg.notifEnabled
 if cfgNotifEnabled == nil then cfgNotifEnabled = true end
 local cfgKeybind1Name    = savedCfg.keybind1 or "LeftControl"
 local cfgKeybind2Name    = savedCfg.keybind2 or "Z"
+local cfgSpeedDecKeyName = savedCfg.speedDecKey or "Minus"
+local cfgSpeedIncKeyName = savedCfg.speedIncKey or "Equals"
 local cfgIsExpanded      = savedCfg.isExpanded or false
 local cfgFavorites       = savedCfg.favorites or {}
 local cfgLightMode       = savedCfg.lightMode or false
@@ -110,12 +112,17 @@ keycodeFromName(cfgKeybind1Name),
 keycodeFromName(cfgKeybind2Name),
 }
 
+local activeSpeedDecKey = keycodeFromName(cfgSpeedDecKeyName)
+local activeSpeedIncKey = keycodeFromName(cfgSpeedIncKeyName)
+
 local function triggerAutoSave()
 saveConfig({
 transparency  = uiTransparency,
 notifEnabled  = startupNotifEnabled,
 keybind1      = activeKeybind[1].Name,
 keybind2      = activeKeybind[2].Name,
+speedDecKey   = activeSpeedDecKey.Name,
+speedIncKey   = activeSpeedIncKey.Name,
 isExpanded    = isExpanded,
     favorites     = cfgFavorites,
     sliderFavs    = cfgSliderFavs,
@@ -571,6 +578,7 @@ local LABEL_H = 22
 local sliderFavObj = {}
 local sliderParams = {}
 local buttonParams = {}
+local sliderControllers = {}
 local function makeSlider(parent, label, minV, maxV, defaultV, callback, uid, isProxy, layoutOrder)
 local savedVal = uid and cfgSliderFavs[uid]
 local val = savedVal or defaultV or minV
@@ -718,6 +726,13 @@ if rebuildFavorites then rebuildFavorites() end
 end)
 sliderFavObj[uid] = { name = label, star = star, pill = pill, getVal = function() return val end }
 end
+end
+
+if uid then
+sliderControllers[uid] = {
+setVal = setVal,
+getVal = function() return val end,
+}
 end
 
 return pill
@@ -1983,6 +1998,7 @@ end)
 
 local isListeningForKeybind = false
 local tempKeys              = {}
+local listeningForSpeedKeyTarget = nil -- nil, "dec", or "inc"
 
 Make("TextLabel", {
 Size = ud2(1,0,0,42), BackgroundTransparency = 1, Text = "Settings",
@@ -2107,9 +2123,46 @@ Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = 
 KeybindBtn.MouseButton1Click:Connect(function()
 if not isListeningForKeybind then
 isListeningForKeybind = true
+listeningForSpeedKeyTarget = nil
 tempKeys = {}
 KeybindBtn.Text = "[ Press 1st Key ]"
 KeybindBtn.TextColor3 = C.dot_yel
+end
+end)
+
+local _, SpeedKeybindSecContent = makeSetSection(ScrollShortcuts, "Walk Speed Keybinds", 70, true)
+
+local SpeedDecPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = SpeedKeybindSecContent })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = SpeedDecPill})
+Make("TextLabel", { Size = ud2(0,120,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Decrease Speed", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SpeedDecPill })
+local SpeedDecBtn = Make("TextButton", { Size = ud2(0,110,0,22), Position = ud2(1,-145,0,5), BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1, Text = "[ " .. activeSpeedDecKey.Name .. " ]", TextColor3 = C.textPri, TextSize = 11, Font = bold, Parent = SpeedDecPill })
+Make("UICorner", {CornerRadius = ud(0,4), Parent = SpeedDecBtn})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = SpeedDecBtn})
+
+local SpeedIncPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), Position = ud2(0,0,0,PART_H+5), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = SpeedKeybindSecContent })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = SpeedIncPill})
+Make("TextLabel", { Size = ud2(0,120,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Increase Speed", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SpeedIncPill })
+local SpeedIncBtn = Make("TextButton", { Size = ud2(0,110,0,22), Position = ud2(1,-145,0,5), BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1, Text = "[ " .. activeSpeedIncKey.Name .. " ]", TextColor3 = C.textPri, TextSize = 11, Font = bold, Parent = SpeedIncPill })
+Make("UICorner", {CornerRadius = ud(0,4), Parent = SpeedIncBtn})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = SpeedIncBtn})
+
+local function startListeningForSpeedKey(target, btn)
+-- Cancel any other capture mode in progress so binds can't collide
+isListeningForKeybind = false
+listeningForSpeedKeyTarget = target
+btn.Text = "[ Press a Key ]"
+btn.TextColor3 = C.dot_yel
+end
+
+SpeedDecBtn.MouseButton1Click:Connect(function()
+if not listeningForSpeedKeyTarget then
+startListeningForSpeedKey("dec", SpeedDecBtn)
+end
+end)
+
+SpeedIncBtn.MouseButton1Click:Connect(function()
+if not listeningForSpeedKeyTarget then
+startListeningForSpeedKey("inc", SpeedIncBtn)
 end
 end)
 
@@ -2557,6 +2610,23 @@ keybindConn = UserInputService.InputBegan:Connect(function(input, processed)
 if not Gui or not Gui.Parent then keybindConn:Disconnect(); return end
 if UninstallOverlay.Visible then return end
 
+if listeningForSpeedKeyTarget and input.UserInputType == Enum.UserInputType.Keyboard then
+if input.KeyCode ~= Enum.KeyCode.Unknown then
+if listeningForSpeedKeyTarget == "dec" then
+activeSpeedDecKey      = input.KeyCode
+SpeedDecBtn.Text       = "[ " .. input.KeyCode.Name .. " ]"
+SpeedDecBtn.TextColor3 = C.textPri
+else
+activeSpeedIncKey      = input.KeyCode
+SpeedIncBtn.Text       = "[ " .. input.KeyCode.Name .. " ]"
+SpeedIncBtn.TextColor3 = C.textPri
+end
+listeningForSpeedKeyTarget = nil
+triggerAutoSave()
+end
+return
+end
+
 if isListeningForKeybind and input.UserInputType == Enum.UserInputType.Keyboard then
 if input.KeyCode ~= Enum.KeyCode.Unknown then
 table.insert(tempKeys, input.KeyCode)
@@ -2585,6 +2655,69 @@ end
 end
 end)
 
+-- Walk Speed Keybinds (press = adjust by 1, hold = keep adjusting by 1 per tick)
+local WALKSPEED_SLIDER_UID = "Scripts_Movement_slider_WalkSpeed"
+local SPEED_HOLD_DELAY     = 0.4  -- time held before auto-repeat kicks in
+local SPEED_HOLD_RATE      = 0.15 -- seconds between repeats while held
+
+local function adjustWalkSpeed(amount)
+local ctrl = sliderControllers[WALKSPEED_SLIDER_UID]
+if ctrl then
+-- Routes through the existing slider, so the UI and saved/favorited value stay in sync
+ctrl.setVal(ctrl.getVal() + amount)
+else
+pcall(function()
+local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+if hum then hum.WalkSpeed = math.max(0, hum.WalkSpeed + amount) end
+end)
+end
+end
+
+-- Tokens make sure a quick tap (released before the hold delay) never
+-- produces more than the single immediate adjustment below, while a true
+-- hold ticks repeatedly until the matching key is released.
+local speedHoldTokens = {}
+
+local function startSpeedHold(dir)
+local token = {}
+speedHoldTokens[dir] = token
+task.spawn(function()
+task.wait(SPEED_HOLD_DELAY)
+while speedHoldTokens[dir] == token do
+adjustWalkSpeed(dir)
+task.wait(SPEED_HOLD_RATE)
+end
+end)
+end
+
+local function stopSpeedHold(dir)
+speedHoldTokens[dir] = nil
+end
+
+local speedKeyConn
+speedKeyConn = UserInputService.InputBegan:Connect(function(input, processed)
+if not Gui or not Gui.Parent then speedKeyConn:Disconnect(); return end
+if processed then return end
+if UninstallOverlay.Visible then return end
+if isListeningForKeybind or listeningForSpeedKeyTarget then return end
+if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+
+if input.KeyCode == activeSpeedDecKey then
+adjustWalkSpeed(-1)
+startSpeedHold(-1)
+elseif input.KeyCode == activeSpeedIncKey then
+adjustWalkSpeed(1)
+startSpeedHold(1)
+end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+if input.KeyCode == activeSpeedDecKey then
+stopSpeedHold(-1)
+elseif input.KeyCode == activeSpeedIncKey then
+stopSpeedHold(1)
+end
+end)
+
 print("[UNScripts] Loaded - All features integrated")
-
-
