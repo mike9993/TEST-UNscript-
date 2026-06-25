@@ -110,6 +110,9 @@ keycodeFromName(cfgKeybind1Name),
 keycodeFromName(cfgKeybind2Name),
 }
 
+local PROFILES_FOLDER = "UNScripts/Profiles"
+local activeProfile = savedCfg.activeProfile or "Default"
+
 local function triggerAutoSave()
 saveConfig({
 transparency  = uiTransparency,
@@ -125,13 +128,6 @@ isExpanded    = isExpanded,
     activeProfile = activeProfile,
 })
 end
-
--- ============================================================
---  Profile Manager
--- ============================================================
-local PROFILES_FOLDER = "UNScripts/Profiles"
-local profiles = {}
-local activeProfile = savedCfg.activeProfile or "Default"
 
 local function ensureProfilesFolder()
 if isfolder and not cfgSafely(isfolder, PROFILES_FOLDER) then
@@ -2406,13 +2402,6 @@ end)
 -- ============================================================
 --  Profile Manager UI
 -- ============================================================
-local function rebuildProfileList()
-for _, child in ipairs(ScrollProfiles:GetChildren()) do
-if child:IsA("Frame") or child:IsA("TextLabel") or child:IsA("TextButton") then
-child:Destroy()
-end
-end
-
 local profileLabel = Make("TextLabel", {
 Size = ud2(1,-8,0,22), BackgroundTransparency = 1,
 Text = "PROFILES", TextColor3 = C.textSec,
@@ -2444,33 +2433,29 @@ Text = "Save", TextColor3 = C.white,
 TextSize = 10, Font = bold, Parent = profileInputRow,
 })
 Make("UICorner", {CornerRadius = ud(0,4), Parent = saveProfileBtn})
-saveProfileBtn.MouseButton1Click:Connect(function()
-local name = profileNameBox.Text:gsub("%s+", "")
-if name == "" then name = "Default" end
-saveCurrentProfile(name)
-activeProfile = name
-triggerAutoSave()
-profileNameBox.Text = ""
-rebuildProfileList()
-end)
 
-local activeProfileLabel = Make("TextLabel", {
+local profileActiveLabel = Make("TextLabel", {
 Size = ud2(1,-8,0,20), BackgroundTransparency = 1,
-Text = "Active: " .. activeProfile,
+Text = "Current: " .. activeProfile,
 TextColor3 = C.dot_grn, TextSize = 10, Font = bold,
 LayoutOrder = 2, Parent = ScrollProfiles,
 })
 
-local function refreshProfileUI()
-activeProfileLabel.Text = "Active: " .. activeProfile
-local profiles = listProfiles()
+local function refreshProfileList()
+for _, child in ipairs(ScrollProfiles:GetChildren()) do
+if child:IsA("Frame") and child:GetAttribute("IsProfileRow") then
+child:Destroy()
+end
+end
+local profs = listProfiles()
 local order = 3
-for _, name in ipairs(profiles) do
+for _, name in ipairs(profs) do
 local row = Make("Frame", {
 Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg,
 BackgroundTransparency = 0.3, BorderSizePixel = 0,
 LayoutOrder = order, Parent = ScrollProfiles,
 })
+row:SetAttribute("IsProfileRow", true)
 row:SetAttribute("SearchName", name)
 Make("UICorner", {CornerRadius = ud(1,0), Parent = row})
 
@@ -2498,8 +2483,12 @@ TextSize = 10, Font = bold, Parent = row,
 })
 Make("UICorner", {CornerRadius = ud(0,4), Parent = loadBtn})
 loadBtn.MouseButton1Click:Connect(function()
-loadAndApplyProfile(name)
-rebuildProfileList()
+activeProfile = name
+local data = loadProfileData(name)
+if data then applyProfileData(data) end
+profileActiveLabel.Text = "Current: " .. activeProfile
+refreshProfileList()
+triggerAutoSave()
 end)
 
 local delBtn = Make("TextButton", {
@@ -2511,26 +2500,34 @@ TextSize = 10, Font = bold, Parent = row,
 Make("UICorner", {CornerRadius = ud(0,4), Parent = delBtn})
 delBtn.MouseButton1Click:Connect(function()
 deleteProfileAndRefresh(name)
-rebuildProfileList()
+profileActiveLabel.Text = "Current: " .. activeProfile
+refreshProfileList()
 end)
 
 order = order + 1
 end
-
-if #profiles == 0 then
-Make("TextLabel", {
+if #profs == 0 then
+local empty = Make("TextLabel", {
 Size = ud2(1,-8,0,28), BackgroundTransparency = 1,
 Text = "No profiles saved", TextColor3 = C.textSec,
 TextSize = 11, Font = reg, LayoutOrder = 3, Parent = ScrollProfiles,
 })
+empty:SetAttribute("IsProfileRow", true)
 end
 end
 
-refreshProfileUI()
+saveProfileBtn.MouseButton1Click:Connect(function()
+local name = profileNameBox.Text:gsub("%s+", "")
+if name == "" then name = "Default" end
+saveCurrentProfile(name)
+activeProfile = name
+triggerAutoSave()
+profileNameBox.Text = ""
+profileActiveLabel.Text = "Current: " .. activeProfile
+refreshProfileList()
+end)
 
-local profileSecWrapper, profileSecContent = makeSetSection(ScrollProfiles, "Profile Manager", 0, true)
-profileSecContent.Size = ud2(1,0,0,0)
-profileSecContent.AutomaticSize = Enum.AutomaticSize.Y
+refreshProfileList()
 
 transparencyFrames = {
 {frame = Main,          base = 0,    radius = UDim.new(0, 16)},
