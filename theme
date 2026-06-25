@@ -1,0 +1,2588 @@
+-- ============================================================
+--  UNScripts UI  |  Executor: Velocity (Refined & Auto-Save)
+--  Merged with Lag's Menu v5.8 features
+-- ============================================================
+
+local Players          = game:GetService("Players")
+local TweenService     = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService       = game:GetService("RunService")
+local GuiService       = game:GetService("GuiService")
+local HttpService      = game:GetService("HttpService")
+local Lighting         = game:GetService("Lighting")
+local StarterGui       = game:GetService("StarterGui")
+local VirtualUser      = game:GetService("VirtualUser")
+
+local LocalPlayer      = Players.LocalPlayer
+local Camera           = workspace.CurrentCamera
+
+local uiParent
+do
+local ok = pcall(function() game:GetService("CoreGui"):IsA("DataModel") end)
+uiParent = ok and game:GetService("CoreGui") or LocalPlayer:WaitForChild("PlayerGui")
+end
+
+local rgb  = Color3.fromRGB
+local ud2  = UDim2.new
+local ud   = UDim.new
+local bold = Enum.Font.GothamBold
+local reg  = Enum.Font.Gotham
+local semi = Enum.Font.GothamSemibold
+
+local C = {
+bg         = rgb(18, 18, 22),
+surface    = rgb(32, 32, 40),
+part_bg    = rgb(55, 55, 65),
+surfaceAlt = rgb(44, 44, 54),
+border     = rgb(70, 70, 82),
+accent     = rgb(50, 120, 255),
+textPri    = rgb(235, 235, 240),
+textSec    = rgb(148, 148, 165),
+dot_red    = rgb(225, 70,  60),
+dot_yel    = rgb(255, 215, 0),
+dot_grn    = rgb(60,  180, 90),
+toggle_off = rgb(72,  72,  85),
+toggle_on  = rgb(50, 120, 255),
+knob       = rgb(248, 248, 252),
+white      = rgb(255, 255, 255),
+}
+
+local CFG_FOLDER = "UNScripts"
+local CFG_FILE   = "settings"
+local CFG_EXT    = ".cfg"
+
+local function cfgSafely(fn, ...)
+if fn then
+local ok, res = pcall(fn, ...)
+if not ok then return nil end
+return res
+end
+end
+
+local function ensureCfgFolder()
+if isfolder and not cfgSafely(isfolder, CFG_FOLDER) then
+cfgSafely(makefolder, CFG_FOLDER)
+end
+end
+
+local function saveConfig(data)
+ensureCfgFolder()
+local ok, encoded = pcall(function() return HttpService:JSONEncode(data) end)
+if ok then
+cfgSafely(writefile, CFG_FOLDER.."/"..CFG_FILE..CFG_EXT, encoded)
+end
+end
+
+local function loadConfig()
+local path = CFG_FOLDER.."/"..CFG_FILE..CFG_EXT
+if not cfgSafely(isfile, path) then return nil end
+local content = cfgSafely(readfile, path)
+if not content then return nil end
+local ok, data = pcall(function() return HttpService:JSONDecode(content) end)
+return ok and data or nil
+end
+
+local savedCfg = loadConfig() or {}
+
+local cfgTransparency    = savedCfg.transparency    or 0.25
+local cfgNotifEnabled    = savedCfg.notifEnabled
+if cfgNotifEnabled == nil then cfgNotifEnabled = true end
+local cfgKeybind1Name    = savedCfg.keybind1 or "LeftControl"
+local cfgKeybind2Name    = savedCfg.keybind2 or "Z"
+local cfgIsExpanded      = savedCfg.isExpanded or false
+local cfgFavorites       = savedCfg.favorites or {}
+local cfgLightMode       = savedCfg.lightMode or false
+local cfgSaveInventory   = savedCfg.saveInventory or false
+local cfgSaveMode        = savedCfg.saveMode or "All"
+local cfgSliderFavs      = savedCfg.sliderFavs or {}
+
+local uiTransparency      = cfgTransparency
+local startupNotifEnabled = cfgNotifEnabled
+local isExpanded          = cfgIsExpanded
+
+local function keycodeFromName(name)
+local ok, kc = pcall(function() return Enum.KeyCode[name] end)
+return (ok and kc) or Enum.KeyCode.Unknown
+end
+
+local activeKeybind = {
+keycodeFromName(cfgKeybind1Name),
+keycodeFromName(cfgKeybind2Name),
+}
+
+local function triggerAutoSave()
+saveConfig({
+transparency  = uiTransparency,
+notifEnabled  = startupNotifEnabled,
+keybind1      = activeKeybind[1].Name,
+keybind2      = activeKeybind[2].Name,
+isExpanded    = isExpanded,
+    favorites     = cfgFavorites,
+    sliderFavs    = cfgSliderFavs,
+    lightMode     = cfgLightMode,
+    saveInventory = cfgSaveInventory,
+    saveMode      = cfgSaveMode
+})
+end
+
+local themeRegistry = {}
+
+local function applyTheme()
+if cfgLightMode then
+C.bg         = rgb(245, 245, 248)
+C.surface    = rgb(218, 218, 224)
+C.part_bg    = rgb(200, 200, 208)
+C.surfaceAlt = rgb(208, 208, 216)
+C.border     = rgb(160, 160, 172)
+C.textPri    = rgb(18, 18, 22)
+C.textSec    = rgb(72, 72, 82)
+C.toggle_off = rgb(150, 150, 162)
+C.knob       = rgb(255, 255, 255)
+C.white      = rgb(12, 12, 16)
+else
+C.bg         = rgb(18, 18, 22)
+C.surface    = rgb(32, 32, 40)
+C.part_bg    = rgb(55, 55, 65)
+C.surfaceAlt = rgb(44, 44, 54)
+C.border     = rgb(70, 70, 82)
+C.textPri    = rgb(235, 235, 240)
+C.textSec    = rgb(148, 148, 165)
+C.toggle_off = rgb(72,  72,  85)
+C.knob       = rgb(248, 248, 252)
+C.white      = rgb(255, 255, 255)
+end
+for _, record in ipairs(themeRegistry) do
+if record.obj and record.obj.Parent then
+for prop, cKey in pairs(record.tags) do
+if C[cKey] then
+record.obj[prop] = C[cKey]
+end
+end
+end
+end
+end
+
+local function Make(className, props)
+local inst = Instance.new(className)
+local tags = {}
+for k, v in pairs(props) do
+inst[k] = v
+if typeof(v) == "Color3" then
+for cKey, cVal in pairs(C) do
+                if v == cVal then
+tags[k] = cKey
+break
+end
+end
+end
+end
+if next(tags) then
+table.insert(themeRegistry, {obj = inst, tags = tags})
+end
+return inst
+end
+
+local transparencyFrames = {}
+local function applyTransparency(t)
+uiTransparency = math.clamp(t, 0, 0.85)
+for _, e in ipairs(transparencyFrames) do
+if e.frame and e.frame.Parent then
+local target = math.clamp(e.base + uiTransparency * (1 - e.base), 0, 0.90)
+e.frame.BackgroundTransparency = target
+end
+end
+end
+
+local existingGui = uiParent:FindFirstChild("UNScriptsInterface")
+if existingGui then existingGui:Destroy() end
+
+local Gui = Make("ScreenGui", {
+Name           = "UNScriptsInterface",
+ResetOnSpawn   = false,
+ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+Parent         = uiParent,
+})
+
+local NORMAL_W, NORMAL_H = 360, 480
+
+local Main = Make("Frame", {
+Size                   = ud2(0, NORMAL_W, 0, NORMAL_H),
+Position               = ud2(0.5, 0, 0.5, 0),
+AnchorPoint            = Vector2.new(0.5, 0.5),
+BackgroundColor3       = C.bg,
+BackgroundTransparency = uiTransparency,
+BorderSizePixel        = 0,
+Active                 = true,
+ClipsDescendants       = true,
+Parent                 = Gui,
+})
+Make("UICorner", {CornerRadius = ud(0, 16), Parent = Main})
+
+local MainScale = Make("UIScale", {Scale = isExpanded and 1.4 or 1, Parent = Main})
+
+local BorderFrame = Make("Frame", {
+Size = ud2(1,0,1,0), BackgroundTransparency = 1,
+BorderSizePixel = 0, Parent = Main,
+})
+Make("UICorner", {CornerRadius = ud(0,16), Parent = BorderFrame})
+Make("UIStroke",  {Color = C.border, Thickness = 1, Transparency = 0.5, Parent = BorderFrame})
+
+local HeaderBar = Make("Frame", {
+Size = ud2(1,0,0,42), BackgroundTransparency = 1,
+BorderSizePixel = 0, Parent = Main,
+})
+
+local function makeDot(xPos, color, parent)
+local dot = Make("TextButton", {
+Size = ud2(0,13,0,13), Position = ud2(0,xPos,0,15),
+Text = "", BackgroundColor3 = color,
+BorderSizePixel = 0, Parent = parent or HeaderBar,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = dot})
+return dot
+end
+local CloseBtn = makeDot(14, C.dot_red)
+local MinBtn   = makeDot(32, C.dot_yel)
+local MaxBtn   = makeDot(50, C.dot_grn)
+
+local TitleLabel = Make("TextLabel", {
+Size = ud2(0,100,0,42), Position = ud2(0.5,-50,0,0),
+BackgroundTransparency = 1, Text = "UNScripts",
+TextColor3 = C.textPri, TextSize = 13, Font = bold,
+TextXAlignment = Enum.TextXAlignment.Center,
+TextYAlignment = Enum.TextYAlignment.Center, Parent = HeaderBar,
+})
+
+local function makeHeaderIcon(xOffset, icon)
+return Make("TextButton", {
+Size = ud2(0,28,0,28), Position = ud2(1,xOffset,0,7),
+BackgroundTransparency = 1, Text = icon,
+TextColor3 = C.textSec, TextSize = 16, Font = bold, Parent = HeaderBar,
+})
+end
+local ToggleBtn = makeHeaderIcon(-36, "⚙")
+local SearchBtn = makeHeaderIcon(-66, "🔍")
+
+local SearchBarHolder = Make("Frame", {
+Size = ud2(0,190,0,26), Position = ud2(0.5,-95,0,-34),
+BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.3,
+BorderSizePixel = 0, ClipsDescendants = true, Parent = HeaderBar,
+})
+Make("UICorner", {CornerRadius = ud(0,7), Parent = SearchBarHolder})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.3, Parent = SearchBarHolder})
+Make("TextLabel", {
+Size = ud2(0,24,1,0), BackgroundTransparency = 1, Text = "🔍",
+TextSize = 11, Font = bold, TextColor3 = C.textSec, Parent = SearchBarHolder,
+})
+local SearchInput = Make("TextBox", {
+Size = ud2(1,-28,1,0), Position = ud2(0,26,0,0),
+BackgroundTransparency = 1, PlaceholderText = "Search...",
+PlaceholderColor3 = C.textSec, Text = "",
+TextColor3 = C.textPri, TextSize = 12, Font = reg,
+ClearTextOnFocus = false, Parent = SearchBarHolder,
+})
+
+local PillUI = Make("TextButton", {
+Size = ud2(0,110,0,34), Position = ud2(0.5,0,0,12),
+AnchorPoint = Vector2.new(0.5,0), BackgroundColor3 = C.bg,
+BackgroundTransparency = uiTransparency, Text = "UNScripts",
+TextColor3 = C.textPri, Font = bold, TextSize = 12,
+Active = true, Visible = false, Parent = Gui,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = PillUI})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = PillUI})
+local PillScale = Make("UIScale", {Scale = 1, Parent = PillUI})
+
+local MainPage = Make("Frame", {
+Size = ud2(1,0,1,-42), Position = ud2(0,0,0,42),
+BackgroundTransparency = 1, ClipsDescendants = true, Parent = Main,
+})
+local SetPage = Make("Frame", {
+Size = ud2(1,0,1,-42), Position = ud2(0,0,0,42),
+BackgroundTransparency = 1, ClipsDescendants = true,
+Visible = false, Parent = Main,
+})
+
+local SavedTools     = {}
+local SavedWalkSpeed = 16
+local SavedJumpPower = 50
+local partState      = {}
+
+local originalToggles = {}
+local proxyToggles    = {}
+
+local function trackCurrentState()
+if not cfgSaveInventory then return end
+local char = LocalPlayer.Character
+local bp   = LocalPlayer:FindFirstChild("Backpack")
+SavedTools = {}
+if bp then
+for _, t in ipairs(bp:GetChildren()) do
+if t:IsA("Tool") then table.insert(SavedTools, t:Clone()) end
+end
+end
+if char then
+for _, t in ipairs(char:GetChildren()) do
+if t:IsA("Tool") then table.insert(SavedTools, t:Clone()) end
+end
+local hum = char:FindFirstChild("Humanoid")
+if hum then
+SavedWalkSpeed = hum.WalkSpeed
+SavedJumpPower = hum.JumpPower
+end
+end
+end
+
+task.spawn(function()
+while task.wait(2) do
+trackCurrentState()
+end
+end)
+
+local function applyTogglesToCharacter()
+for uid, state in pairs(partState) do
+if state then
+local shouldRestore = true
+if cfgSaveMode == "Favored" and not cfgFavorites[uid] then
+shouldRestore = false
+end
+if shouldRestore then
+if originalToggles[uid] and originalToggles[uid].toggle then
+originalToggles[uid].toggle.SetOn(true, false)
+end
+else
+if originalToggles[uid] and originalToggles[uid].toggle then
+originalToggles[uid].toggle.SetOn(false, false)
+end
+end
+end
+end
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+if not cfgSaveInventory then return end
+task.wait(1.5)
+local hum = char:WaitForChild("Humanoid", 3)
+if hum then
+hum.WalkSpeed = SavedWalkSpeed
+hum.JumpPower = SavedJumpPower
+end
+local bp = LocalPlayer:WaitForChild("Backpack", 3)
+if bp then
+for _, tClone in ipairs(SavedTools) do
+if not bp:FindFirstChild(tClone.Name) then
+tClone:Clone().Parent = bp
+end
+end
+end
+applyTogglesToCharacter()
+end)
+
+local UninstallOverlay = Make("Frame", {
+Size = ud2(1,0,1,0), Position = ud2(0,0,0,0),
+BackgroundColor3       = C.bg,
+BackgroundTransparency = 0.05,
+BorderSizePixel        = 0,
+ZIndex                 = 100,
+Visible                = false,
+Parent                 = Main,
+})
+Make("UICorner", {CornerRadius = ud(0, 16), Parent = UninstallOverlay})
+
+Make("TextLabel", {
+Size = ud2(0,48,0,48), Position = ud2(0.5,-24,0,56),
+BackgroundTransparency = 1, Text = "⚠",
+TextColor3 = C.dot_yel, TextSize = 36, Font = bold,
+TextXAlignment = Enum.TextXAlignment.Center, Parent = UninstallOverlay,
+})
+Make("TextLabel", {
+Size = ud2(1,-40,0,26), Position = ud2(0,20,0,110),
+BackgroundTransparency = 1, Text = "Remove UNScripts?",
+TextColor3 = C.white, TextSize = 16, Font = bold,
+TextXAlignment = Enum.TextXAlignment.Center, Parent = UninstallOverlay,
+})
+Make("TextLabel", {
+Size = ud2(1,-40,0,60), Position = ud2(0,20,0,144),
+BackgroundTransparency = 1,
+Text = "This will permanently destroy the interface.\nYour saved settings will also be cleared.\nThis action cannot be undone.",
+TextColor3 = C.textSec, TextSize = 12, Font = reg,
+TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center, Parent = UninstallOverlay,
+})
+Make("TextLabel", {
+Size = ud2(1,-40,0,18), Position = ud2(0,20,0,212),
+BackgroundTransparency = 1, Text = "[ Enter ] = Yes      [ Backspace ] = No",
+TextColor3 = C.textSec, TextSize = 10, Font = reg,
+TextXAlignment = Enum.TextXAlignment.Center, Parent = UninstallOverlay,
+})
+Make("Frame", {
+Size = ud2(0,200,0,1), Position = ud2(0.5,-100,0,238),
+BackgroundColor3 = C.border, BackgroundTransparency = 0.3,
+BorderSizePixel = 0, Parent = UninstallOverlay,
+})
+
+local UninstallYesBtn = Make("TextButton", {
+Size = ud2(0,120,0,34), Position = ud2(0.5,-128,0,252),
+BackgroundColor3 = C.dot_red, BackgroundTransparency = 0.1,
+Text = "Yes, Remove", TextColor3 = C.white,
+TextSize = 12, Font = bold, Parent = UninstallOverlay,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = UninstallYesBtn})
+
+local UninstallNoBtn = Make("TextButton", {
+Size = ud2(0,120,0,34), Position = ud2(0.5,8,0,252),
+BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1,
+Text = "No, Cancel", TextColor3 = C.textPri,
+TextSize = 12, Font = bold, Parent = UninstallOverlay,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = UninstallNoBtn})
+
+local function runFullUninstall()
+	UninstallOverlay.Visible = false
+	pcall(function()
+		local path = CFG_FOLDER.."/"..CFG_FILE..CFG_EXT
+		if cfgSafely(isfile, path) then cfgSafely(delfile, path) end
+	end)
+	pcall(function()
+		local cg = game:GetService("CoreGui")
+		for _, v in ipairs(cg:GetChildren()) do
+			if v.Name:find("UNS_ESP") then v:Destroy() end
+		end
+	end)
+	espEnabled = false
+	if Gui and Gui.Parent then Gui:Destroy() end
+end
+
+UninstallYesBtn.MouseButton1Click:Connect(runFullUninstall)
+UninstallNoBtn.MouseButton1Click:Connect(function() UninstallOverlay.Visible = false end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+if not UninstallOverlay.Visible then return end
+if input.KeyCode == Enum.KeyCode.Return or input.KeyCode == Enum.KeyCode.KeypadEnter then
+runFullUninstall()
+elseif input.KeyCode == Enum.KeyCode.Backspace then
+UninstallOverlay.Visible = false
+end
+end)
+
+local activeTab   = "Home"
+local tabs        = {}
+local tabSections = {Home = {}, Scripts = {}, Hubs = {}}
+local tabTween    = TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+local sectionTween= TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+local TabBar = Make("Frame", {
+Size = ud2(1,-24,0,30), Position = ud2(0,12,0,8),
+BackgroundTransparency = 1, Parent = MainPage,
+})
+Make("UIListLayout", {
+FillDirection = Enum.FillDirection.Horizontal,
+HorizontalAlignment = Enum.HorizontalAlignment.Center,
+Padding = ud(0,6), Parent = TabBar,
+})
+
+local function makeTab(name)
+local btn = Make("TextButton", {
+Size = ud2(0,64,0,26), BackgroundColor3 = C.surfaceAlt,
+BackgroundTransparency = 0.5, Text = name,
+TextColor3 = C.textSec, TextSize = 12, Font = bold, Parent = TabBar,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = btn})
+local pill = Make("Frame", {
+Size = ud2(0,0,0,2), Position = ud2(0.5,0,1,-2),
+AnchorPoint = Vector2.new(0.5,0), BackgroundColor3 = C.accent,
+BorderSizePixel = 0, Parent = btn,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = pill})
+return {Button = btn, Pill = pill, Name = name}
+end
+
+tabs.Home   = makeTab("Home")
+tabs.Scripts = makeTab("Scripts")
+tabs.Hubs   = makeTab("Hubs")
+
+local CollapseAllBtn = Make("TextButton", {
+Size = ud2(0,26,0,26), BackgroundColor3 = C.surfaceAlt,
+BackgroundTransparency = 0.3, Text = "^", TextColor3 = C.textSec,
+TextSize = 14, Font = bold, LayoutOrder = 10, Visible = false, Parent = TabBar,
+})
+Make("UICorner", {CornerRadius = ud(0,6), Parent = CollapseAllBtn})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = CollapseAllBtn})
+
+local TabContent = Make("Frame", {
+Size = ud2(1,-24,1,-44), Position = ud2(0,12,0,44),
+BackgroundTransparency = 1, ClipsDescendants = true, Parent = MainPage,
+})
+local SectionScroll = Make("ScrollingFrame", {
+Size = ud2(1,0,1,0), BackgroundTransparency = 1, BorderSizePixel = 0,
+ScrollBarThickness = 2, ScrollBarImageColor3 = C.border,
+CanvasSize = ud2(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+Active = true, Parent = TabContent,
+})
+Make("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Padding = ud(0,0), Parent = SectionScroll})
+
+local toggleTween = TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+
+local function makeToggle(parent, yPos, callback, initOn)
+local track = Make("Frame", {
+Size = ud2(0,36,0,18), Position = ud2(1,-46,0,yPos),
+BackgroundColor3 = initOn and C.toggle_on or C.toggle_off,
+BorderSizePixel = 0, Parent = parent,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = track})
+
+local knob = Make("Frame", {
+Size = ud2(0,14,0,14),
+Position = initOn and ud2(0,20,0,2) or ud2(0,2,0,2),
+BackgroundColor3 = C.knob, BorderSizePixel = 0, Parent = track,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = knob})
+Make("UIStroke", {Color = rgb(0,0,0), Thickness = 1, Transparency = 0.7, Parent = knob})
+
+local isOn = initOn == true
+local hitbox = Make("TextButton", {
+Size = ud2(1,0,1,0), BackgroundTransparency = 1, Text = "",
+ZIndex = knob.ZIndex + 1, Parent = track,
+})
+
+local function setOn(state, silent)
+isOn = state
+track.BackgroundColor3 = isOn and C.toggle_on or C.toggle_off
+knob.Position = isOn and ud2(0,20,0,2) or ud2(0,2,0,2)
+TweenService:Create(knob, toggleTween, {
+Position = isOn and ud2(0,20,0,2) or ud2(0,2,0,2)
+}):Play()
+TweenService:Create(track, toggleTween, {
+BackgroundColor3 = isOn and C.toggle_on or C.toggle_off
+}):Play()
+if callback and not silent then callback(isOn) end
+end
+
+hitbox.MouseButton1Click:Connect(function()
+setOn(not isOn, false)
+end)
+return {Track = track, Knob = knob, IsOn = function() return isOn end, SetOn = setOn}
+end
+
+local PART_H = 32
+local SECTION_H = 38
+local SLIDER_H = 48
+local LABEL_H = 22
+
+local sliderFavObj = {}
+local sliderParams = {}
+local buttonParams = {}
+local function makeSlider(parent, label, minV, maxV, defaultV, callback, uid, isProxy, layoutOrder)
+local savedVal = uid and cfgSliderFavs[uid]
+local val = savedVal or defaultV or minV
+if not isProxy and uid then
+sliderParams[uid] = { label = label, minV = minV, maxV = maxV, defaultV = defaultV, callback = callback }
+end
+local pill = Make("Frame", {
+Size = ud2(1,-8,0,SLIDER_H), BackgroundColor3 = C.part_bg,
+BackgroundTransparency = 0.3, BorderSizePixel = 0,
+LayoutOrder = layoutOrder or 0, Parent = parent,
+})
+pill:SetAttribute("SearchName", label)
+Make("UICorner", {CornerRadius = ud(1,0), Parent = pill})
+
+Make("TextLabel", {
+Size = ud2(0,110,0,20), Position = ud2(0,14,0,6),
+BackgroundTransparency = 1, Text = label,
+TextColor3 = C.textPri, TextSize = 11, Font = reg,
+TextXAlignment = Enum.TextXAlignment.Left, Parent = pill,
+})
+
+local valInput = Make("TextBox", {
+Size = ud2(0,42,0,20), Position = ud2(1,-56,0,6),
+BackgroundTransparency = 1, Text = tostring(val),
+TextColor3 = C.textSec, TextSize = 10, Font = bold,
+TextXAlignment = Enum.TextXAlignment.Right, Parent = pill,
+ClearTextOnFocus = false,
+})
+
+local track = Make("Frame", {
+Size = ud2(1,-28,0,6), Position = ud2(0,14,0,32),
+BackgroundColor3 = C.toggle_off, BackgroundTransparency = 0.2,
+BorderSizePixel = 0, Parent = pill,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = track})
+
+local frac = (val - minV) / (maxV - minV)
+local fill = Make("Frame", {
+Size = ud2(frac, 0, 1, 0), BackgroundColor3 = C.accent,
+BackgroundTransparency = 0, BorderSizePixel = 0, Parent = track,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = fill})
+
+local knob = Make("TextButton", {
+Size = ud2(0,14,0,14), Position = ud2(frac, -7, 0, -4),
+BackgroundColor3 = C.knob, BorderSizePixel = 0, Text = "", Parent = track,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = knob})
+Make("UIStroke", {Color = rgb(80,80,80), Thickness = 1, Transparency = 0.3, Parent = knob})
+
+local dragging = false
+
+local function setVal(v)
+v = math.clamp(v, minV, maxV)
+val = v
+valInput.Text = tostring(v)
+local p = (v - minV) / (maxV - minV)
+TweenService:Create(fill, TweenInfo.new(0.1), {Size = ud2(p, 0, 1, 0)}):Play()
+knob.Position = ud2(p, -7, 0, -4)
+if uid and cfgFavorites[uid] then
+cfgSliderFavs[uid] = val
+end
+if callback then callback(val) end
+end
+
+valInput.FocusLost:Connect(function()
+local num = tonumber(valInput.Text)
+if num then
+setVal(num)
+else
+valInput.Text = tostring(val)
+end
+end)
+
+knob.InputBegan:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 then
+dragging = true
+end
+end)
+
+local hitbox = Make("TextButton", {
+Size = ud2(1,0,1,20), Position = ud2(0,0,0,-7),
+BackgroundTransparency = 1, Text = "", ZIndex = knob.ZIndex - 1, Parent = track,
+})
+hitbox.InputBegan:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 then
+dragging = true
+local rel = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+setVal(math.floor(minV + (maxV - minV) * rel + 0.5))
+end
+end)
+
+local ec
+ec = UserInputService.InputEnded:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 then
+dragging = false
+end
+end)
+local rc = UserInputService.InputChanged:Connect(function(input)
+if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+local rel = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+setVal(math.floor(minV + (maxV - minV) * rel + 0.5))
+end
+end)
+pill.Destroying:Connect(function() ec:Disconnect(); rc:Disconnect() end)
+
+if uid then
+if isProxy then
+local star = Make("TextButton", {
+Size = ud2(0,24,0,24), Position = ud2(1,-82,0,2),
+BackgroundTransparency = 1, Text = "★",
+TextColor3 = C.dot_yel,
+TextSize = 18, Font = bold, Parent = pill,
+})
+star.MouseButton1Click:Connect(function()
+cfgFavorites[uid] = false
+cfgSliderFavs[uid] = nil
+if sliderFavObj[uid] and sliderFavObj[uid].star then
+sliderFavObj[uid].star.TextColor3 = C.textSec
+end
+triggerAutoSave()
+if rebuildFavorites then rebuildFavorites() end
+end)
+else
+local star = Make("TextButton", {
+Size = ud2(0,24,0,24), Position = ud2(1,-82,0,2),
+BackgroundTransparency = 1, Text = "★",
+TextColor3 = cfgFavorites[uid] and C.dot_yel or C.textSec,
+TextSize = 18, Font = bold, Parent = pill,
+})
+star.MouseButton1Click:Connect(function()
+cfgFavorites[uid] = not cfgFavorites[uid]
+local color = cfgFavorites[uid] and C.dot_yel or C.textSec
+star.TextColor3 = color
+if cfgFavorites[uid] then
+cfgSliderFavs[uid] = val
+else
+cfgSliderFavs[uid] = nil
+end
+if sliderFavObj[uid] and sliderFavObj[uid].star and sliderFavObj[uid].star ~= star then
+sliderFavObj[uid].star.TextColor3 = color
+end
+triggerAutoSave()
+if rebuildFavorites then rebuildFavorites() end
+end)
+sliderFavObj[uid] = { name = label, star = star, pill = pill, getVal = function() return val end }
+end
+end
+
+return pill
+end
+
+local function makeButton(parent, label, callback, uid, isProxy, layoutOrder)
+local pill = Make("Frame", {
+Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.surfaceAlt,
+BackgroundTransparency = 0.1, BorderSizePixel = 0,
+LayoutOrder = layoutOrder or 0, Parent = parent,
+})
+pill:SetAttribute("SearchName", label)
+Make("UICorner", {CornerRadius = ud(1,0), Parent = pill})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = pill})
+
+local lbl = Make("TextLabel", {
+Size = ud2(0,120,1,0), Position = ud2(0,14,0,0),
+BackgroundTransparency = 1, Text = label,
+TextColor3 = C.textPri, TextSize = 11, Font = semi,
+TextXAlignment = Enum.TextXAlignment.Left, Parent = pill,
+})
+
+local btn = Make("TextButton", {
+Size = ud2(0,70,0,22), Position = ud2(1,-80,0.5,-11),
+BackgroundColor3 = C.accent, BackgroundTransparency = 0.1,
+Text = "Run", TextColor3 = C.white,
+TextSize = 10, Font = bold, Parent = pill,
+})
+Make("UICorner", {CornerRadius = ud(0,4), Parent = btn})
+btn.MouseButton1Click:Connect(function()
+if callback then callback() end
+btn.Text = "Done!"
+task.delay(0.8, function() btn.Text = "Run" end)
+end)
+
+if uid then
+if isProxy then
+local star = Make("TextButton", {
+Size = ud2(0,24,0,24), Position = ud2(1,-102,0,4),
+BackgroundTransparency = 1, Text = "★",
+TextColor3 = C.dot_yel,
+TextSize = 18, Font = bold, Parent = pill,
+})
+star.MouseButton1Click:Connect(function()
+cfgFavorites[uid] = false
+if buttonParams[uid] and buttonParams[uid].star then
+buttonParams[uid].star.TextColor3 = C.textSec
+end
+triggerAutoSave()
+if rebuildFavorites then rebuildFavorites() end
+end)
+else
+local star = Make("TextButton", {
+Size = ud2(0,22,0,22), Position = ud2(1,-100,0,5),
+BackgroundTransparency = 1, Text = "★",
+TextColor3 = cfgFavorites[uid] and C.dot_yel or C.textSec,
+TextSize = 18, Font = bold, Parent = pill,
+})
+buttonParams[uid] = { name = label, callback = callback, star = star }
+star.MouseButton1Click:Connect(function()
+cfgFavorites[uid] = not cfgFavorites[uid]
+local color = cfgFavorites[uid] and C.dot_yel or C.textSec
+star.TextColor3 = color
+triggerAutoSave()
+if rebuildFavorites then rebuildFavorites() end
+end)
+end
+end
+
+return pill
+end
+
+local function makeLabel(parent, text, uid, layoutOrder)
+local lbl = Make("TextLabel", {
+Size = ud2(1,-8,0,LABEL_H), BackgroundTransparency = 1,
+Text = " -- " .. text .. " --", TextColor3 = C.textSec,
+TextSize = 10, Font = bold, LayoutOrder = layoutOrder,
+TextXAlignment = Enum.TextXAlignment.Center, Parent = parent,
+})
+lbl:SetAttribute("SearchName", text)
+return lbl
+end
+
+local favSectionObj   = nil
+local rebuildFavorites
+local activeSectionObj = nil
+local rebuildActive
+
+-- Core loops
+local flyEnabled = false
+local flySpeed = 60
+local noclipEnabled = false
+local infJumpEnabled = false
+local antiVoidEnabled = false
+local clickTPEnabled = false
+local aimAssistEnabled = false
+local wallCheckEnabled = true
+local aimSmoothness = 0.15
+local fullBrightEnabled = false
+local rainbowSkyEnabled = false
+local shadowsDisabled = false
+local particlesDisabled = false
+local fogRemoved = false
+local postFXDisabled = false
+local decalsDisabled = false
+local antiAFKEnabled = false
+local espEnabled = false
+local espEnemyOnly = false
+local espNames = false
+local espDistance = false
+local espChams = false
+
+-- ESP
+local function createTogglePart(parent, pName, uid, layoutOrder, isProxy)
+local partPill = Make("Frame", {
+Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg,
+BackgroundTransparency = 0.3, BorderSizePixel = 0,
+LayoutOrder = layoutOrder, Parent = parent,
+})
+partPill:SetAttribute("SearchName", pName)
+Make("UICorner", {CornerRadius = ud(1,0), Parent = partPill})
+Make("TextLabel", {
+Size = ud2(1,-80,1,0), Position = ud2(0,14,0,0),
+BackgroundTransparency = 1, Text = pName,
+TextColor3 = C.textPri, TextSize = 11, Font = reg,
+TextXAlignment = Enum.TextXAlignment.Left, Parent = partPill,
+})
+
+local toggle
+toggle = makeToggle(partPill, (PART_H-18)/2, function(state)
+partState[uid] = state
+
+if isProxy then
+if originalToggles[uid] then originalToggles[uid].toggle.SetOn(state, true) end
+else
+if proxyToggles[uid] then proxyToggles[uid].toggle.SetOn(state, true) end
+end
+
+if pName == "Fly" then
+flyEnabled = state
+if not state then
+pcall(function()
+local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+if root then
+local bv = root:FindFirstChild("UNS_FlyBV"); if bv then bv:Destroy() end
+local bg = root:FindFirstChild("UNS_FlyBG"); if bg then bg:Destroy() end
+end
+end)
+else
+task.spawn(function()
+task.wait(0.15)
+while flyEnabled do
+if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+task.wait(0.5)
+else
+break
+end
+end
+if not flyEnabled then return end
+local root = LocalPlayer.Character.HumanoidRootPart
+local bv = Instance.new("BodyVelocity")
+bv.Name = "UNS_FlyBV"; bv.Velocity = Vector3.new(0,0,0); bv.MaxForce = Vector3.new(1e5,1e5,1e5); bv.Parent = root
+local bg = Instance.new("BodyGyro")
+bg.Name = "UNS_FlyBG"; bg.MaxTorque = Vector3.new(1e5,1e5,1e5); bg.D = 50; bg.P = 1e4; bg.Parent = root
+while flyEnabled do
+if not root.Parent then break end
+local speed = flySpeed * (UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and 2 or 1)
+local camCF = Camera.CFrame
+local fwd = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
+local rgt = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z)
+if fwd.Magnitude > 0.001 then fwd = fwd.Unit end
+if rgt.Magnitude > 0.001 then rgt = rgt.Unit end
+local vel = Vector3.new(0,0,0)
+if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + fwd end
+if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - fwd end
+if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - rgt end
+if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + rgt end
+if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0,1,0) end
+if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vel = vel - Vector3.new(0,1,0) end
+bv.Velocity = vel.Magnitude > 0.001 and vel.Unit * speed or Vector3.new(0,0,0)
+local yaw = math.atan2(-camCF.LookVector.X, -camCF.LookVector.Z)
+bg.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, yaw, 0)
+task.wait()
+end
+if bv then bv:Destroy() end
+if bg then bg:Destroy() end
+end)
+end
+elseif pName == "No Clip" then
+noclipEnabled = state
+elseif pName == "Infinite Jump" then
+infJumpEnabled = state
+elseif pName == "Anti-Void" then
+antiVoidEnabled = state
+    elseif pName == "Click Teleport" then
+clickTPEnabled = state
+elseif pName == "Aim Assist" then
+aimAssistEnabled = state
+elseif pName == "Wall Check" then
+wallCheckEnabled = state
+elseif pName == "Full Bright" then
+fullBrightEnabled = state
+pcall(function()
+Lighting.Brightness = state and 10 or 1
+Lighting.Ambient = state and Color3.new(1,1,1) or Color3.new(0,0,0)
+Lighting.OutdoorAmbient = state and Color3.new(1,1,1) or rgb(127,127,127)
+end)
+elseif pName == "Rainbow Sky" then
+rainbowSkyEnabled = state
+if not state then
+pcall(function()
+Lighting.Ambient = Color3.new(0,0,0)
+Lighting.OutdoorAmbient = rgb(140,140,140)
+end)
+end
+elseif pName == "Disable Shadows" then
+shadowsDisabled = state
+pcall(function() Lighting.GlobalShadows = not state end)
+    elseif pName == "Disable Particles" then
+        particlesDisabled = state
+task.spawn(function()
+task.wait(0.1)
+for _, o in ipairs(workspace:GetDescendants()) do pcall(function()
+if o:IsA("ParticleEmitter") or o:IsA("Smoke") or o:IsA("Fire") or o:IsA("Sparkles") then o.Enabled = not state end
+end) end
+end)
+elseif pName == "Remove Fog" then
+fogRemoved = state
+pcall(function() Lighting.FogEnd = state and 100000 or 500; Lighting.FogStart = state and 100000 or 0 end)
+elseif pName == "Disable Post-FX" then
+postFXDisabled = state
+for _, o in ipairs(Lighting:GetChildren()) do pcall(function() if o:IsA("PostEffect") then o.Enabled = not state end end) end
+    elseif pName == "Disable Decals" then
+        decalsDisabled = state
+task.spawn(function()
+task.wait(0.1)
+for _, o in ipairs(workspace:GetDescendants()) do pcall(function()
+if o:IsA("Decal") or o:IsA("Texture") then o.Transparency = state and 1 or 0 end
+end) end
+end)
+elseif pName == "Anti-AFK" then
+antiAFKEnabled = state
+elseif pName == "Enable ESP" then
+espEnabled = state
+if not state then ClearESP() end
+elseif pName == "Enemies Only" then
+espEnemyOnly = state
+elseif pName == "Show Names" then
+espNames = state
+elseif pName == "Show Distance" then
+espDistance = state
+elseif pName == "Show Chams" then
+espChams = state
+elseif pName == "TPTool" then
+if state then
+local bp = LocalPlayer:FindFirstChild("Backpack")
+local char = LocalPlayer.Character
+if bp and bp:FindFirstChild("TPTool") then bp.TPTool:Destroy() end
+if char and char:FindFirstChild("TPTool") then char.TPTool:Destroy() end
+if bp then
+local t = Instance.new("Tool")
+t.Name = "TPTool"
+t.RequiresHandle = false
+t.Activated:Connect(function()
+local mouse = LocalPlayer:GetMouse()
+local c = LocalPlayer.Character
+if c and c:FindFirstChild("HumanoidRootPart") then
+c.HumanoidRootPart.CFrame = CFrame.new(mouse.Hit.Position + Vector3.new(0,3,0))
+end
+end)
+t.Parent = bp
+end
+else
+local bp = LocalPlayer:FindFirstChild("Backpack")
+if bp and bp:FindFirstChild("TPTool") then bp.TPTool:Destroy() end
+local char = LocalPlayer.Character
+if char and char:FindFirstChild("TPTool") then char.TPTool:Destroy() end
+end
+    elseif pName == "BTools" then
+        if state then
+            local bp = LocalPlayer:FindFirstChild("Backpack")
+            if bp then
+                local f3xGui = bp:FindFirstChild("F3X GUI")
+                if f3xGui then f3xGui:Destroy() end
+                for _, t in ipairs(bp:GetChildren()) do
+                    if t:IsA("Tool") and (t.Name:find("F3X") or t.Name:find("f3x") or t.Name:find("F3x") or t.Name:find("BTool") or t.Name:find("Btool")) then
+                        t:Destroy()
+                    end
+                end
+            end
+            local char = LocalPlayer.Character
+            if char then
+                for _, t in ipairs(char:GetChildren()) do
+                    if t:IsA("Tool") and (t.Name:find("F3X") or t.Name:find("f3x") or t.Name:find("F3x") or t.Name:find("BTool") or t.Name:find("Btool")) then
+                        t:Destroy()
+                    end
+                end
+            end
+            pcall(function()
+                loadstring(game:GetObjects("rbxassetid://6695644299")[1].Source)()
+            end)
+        else
+            local bp = LocalPlayer:FindFirstChild("Backpack")
+            if bp then
+                for _, t in ipairs(bp:GetChildren()) do
+                    if t:IsA("Tool") and (t.Name:find("F3X") or t.Name:find("f3x") or t.Name:find("F3x") or t.Name:find("BTool") or t.Name:find("Btool")) then
+                        t:Destroy()
+                    end
+                end
+                local f3xGui = bp:FindFirstChild("F3X GUI")
+                if f3xGui then f3xGui:Destroy() end
+            end
+            local char = LocalPlayer.Character
+            if char then
+                for _, t in ipairs(char:GetChildren()) do
+                    if t:IsA("Tool") and (t.Name:find("F3X") or t.Name:find("f3x") or t.Name:find("F3x") or t.Name:find("BTool") or t.Name:find("Btool")) then
+                        t:Destroy()
+                    end
+                end
+            end
+        end
+end
+
+if rebuildActive then rebuildActive() end
+if rebuildFavorites then rebuildFavorites() end
+end, partState[uid] or false)
+
+local star = Make("TextButton", {
+Size = ud2(0,22,0,22), Position = ud2(1,-74,0,5),
+BackgroundTransparency = 1, Text = "★",
+TextColor3 = cfgFavorites[uid] and C.dot_yel or C.textSec,
+TextSize = 18, Font = bold, Parent = partPill,
+})
+
+star.MouseButton1Click:Connect(function()
+cfgFavorites[uid] = not cfgFavorites[uid]
+local color = cfgFavorites[uid] and C.dot_yel or C.textSec
+star.TextColor3 = color
+if isProxy then
+if originalToggles[uid] then originalToggles[uid].star.TextColor3 = color end
+else
+if proxyToggles[uid] then proxyToggles[uid].star.TextColor3 = color end
+end
+triggerAutoSave()
+rebuildFavorites()
+end)
+
+if isProxy then
+proxyToggles[uid] = { toggle = toggle, star = star, pill = partPill }
+else
+originalToggles[uid] = { toggle = toggle, star = star, name = pName, pill = partPill }
+end
+return partPill
+end
+
+-- ESP system
+local function getPlayerESPColor(targetPlayer)
+-- 1. Check default Roblox Teams Service
+if targetPlayer.Team and typeof(targetPlayer.Team) == "Instance" and targetPlayer.Team:IsA("Team") then
+return targetPlayer.Team.TeamColor.Color
+end
+
+-- 2. Check for common Custom Team Colors in the player object
+local customColor = targetPlayer:FindFirstChild("TeamColor") or targetPlayer:FindFirstChild("PlayerColor")
+if customColor then
+if customColor:IsA("Color3Value") then
+return customColor.Value
+elseif customColor:IsA("BrickColorValue") then
+return customColor.Value.Color
+end
+end
+
+-- 3. Fallback Ally/Enemy Logic
+if LocalPlayer.Team and targetPlayer.Team == LocalPlayer.Team then
+return Color3.fromRGB(0, 255, 0) -- Green for Allies
+end
+
+-- 4. Default Fallback
+return Color3.fromRGB(255, 0, 0) -- Red for Enemies/Unaffiliated
+end
+
+local espObjects = {}
+
+-- Cleanup any leftover ESP from previous instances
+pcall(function()
+local coreGui = game:GetService("CoreGui")
+for _, v in ipairs(coreGui:GetChildren()) do
+if v.Name:find("UNS_ESP") then v:Destroy() end
+end
+end)
+
+local function ClearESP()
+for _, obj in pairs(espObjects) do
+if obj then
+pcall(function() if obj.Highlight then obj.Highlight:Destroy() end end)
+pcall(function() if obj.BillboardGui then obj.BillboardGui:Destroy() end end)
+end
+end
+espObjects = {}
+end
+
+local function CreateESP(player)
+if player == LocalPlayer then return end
+if espObjects[player] then return end
+local ok = pcall(function()
+local entry = {}
+local espColor = getPlayerESPColor(player)
+local highlight = Instance.new("Highlight")
+highlight.Name = "UNS_ESP_Cham"; highlight.FillColor = espColor; highlight.OutlineColor = Color3.new(1,1,1)
+highlight.FillTransparency = 0.5; highlight.OutlineTransparency = 0.8; highlight.Enabled = false
+highlight.Parent = game:GetService("CoreGui"); entry.Highlight = highlight
+local bb = Instance.new("BillboardGui")
+bb.Name = "UNS_ESP_BB"; bb.Size = UDim2.new(0,100,0,50); bb.AlwaysOnTop = true
+bb.ResetOnSpawn = false; bb.Parent = game:GetService("CoreGui"); entry.BillboardGui = bb
+local nameL = Instance.new("TextLabel", bb)
+nameL.Size = UDim2.new(1,0,0,14); nameL.BackgroundTransparency = 1; nameL.TextColor3 = espColor
+nameL.TextStrokeTransparency = 0.5; nameL.Text = player.Name; nameL.Font = bold; nameL.TextSize = 13
+entry.NameLabel = nameL
+local distL = nameL:Clone()
+distL.Position = UDim2.new(0,0,0,14); distL.Text = "0 studs"; distL.Font = reg; distL.TextSize = 11; distL.Parent = bb
+entry.DistLabel = distL
+espObjects[player] = entry
+end)
+if not ok then
+warn("UNScripts: Failed to create ESP for " .. player.Name)
+end
+end
+
+local function UpdateESP()
+if not espEnabled then return end
+for _, player in ipairs(Players:GetPlayers()) do
+if player ~= LocalPlayer and not espObjects[player] then CreateESP(player) end
+end
+for player, data in pairs(espObjects) do
+local char = player.Character; local hrp = char and char:FindFirstChild("HumanoidRootPart")
+local hum = char and char:FindFirstChildOfClass("Humanoid"); local head = char and (char:FindFirstChild("Head") or hrp)
+if char and hrp and head and hum and hum.Health > 0 then
+local isEnemy = true
+if espEnemyOnly and LocalPlayer.Team and player.Team then isEnemy = LocalPlayer.Team ~= player.Team end
+if not isEnemy then
+data.BillboardGui.Enabled = false; data.Highlight.Enabled = false
+else
+local espColor = getPlayerESPColor(player)
+data.Highlight.Enabled = espChams; data.Highlight.Adornee = char; data.Highlight.FillColor = espColor
+data.Highlight.OutlineColor = espColor
+data.BillboardGui.Enabled = (espNames or espDistance); data.BillboardGui.Adornee = head
+data.NameLabel.Visible = espNames; data.NameLabel.TextColor3 = espColor
+local myHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+if myHRP and espDistance then
+local dist = (hrp.Position - myHRP.Position).Magnitude
+data.DistLabel.Text = string.format("%d studs", dist); data.DistLabel.Visible = true; data.DistLabel.TextColor3 = espColor
+else data.DistLabel.Visible = false end
+end
+else
+data.BillboardGui.Enabled = false; data.Highlight.Enabled = false
+end
+end
+end
+
+-- Feature definitions per section
+local sectionToggleFeatures = {
+["Movement"] = {
+"Fly", "No Clip", "Anti-Void",
+},
+["Aim Assist"] = {
+"Aim Assist", "Wall Check", "Click Teleport",
+},
+Visual = {
+"Full Bright", "Rainbow Sky", "Disable Shadows",
+"Disable Particles", "Remove Fog", "Disable Post-FX", "Disable Decals"
+},
+ESP = {
+"Enable ESP", "Enemies Only", "Show Names", "Show Distance", "Show Chams"
+},
+Misc = {
+"Anti-AFK", "BTools"
+},
+}
+local sectionSliderFeatures = {
+["Movement"] = {
+{name = "WalkSpeed", min = 16, max = 500, default = 16, cb = function(v)
+pcall(function() LocalPlayer.Character.Humanoid.WalkSpeed = v end)
+end},
+{name = "JumpPower", min = 50, max = 500, default = 50, cb = function(v)
+pcall(function() LocalPlayer.Character.Humanoid.JumpPower = v end)
+end},
+{name = "Fly Speed", min = 10, max = 300, default = 60, cb = function(v) flySpeed = v end},
+},
+["Aim Assist"] = {
+{name = "Aim Smoothness", min = 1, max = 100, default = 15, cb = function(v) aimSmoothness = v / 100 end},
+},
+Visual = {
+{name = "Camera FOV", min = 50, max = 120, default = 70, cb = function(v)
+pcall(function() Camera.FieldOfView = v end)
+end},
+},
+}
+local sectionButtonFeatures = {
+["Movement"] = {
+{name = "Infinite Jump", cb = function()
+pcall(function()
+loadstring(game:HttpGet("https://obj.wearedevs.net/2/scripts/Infinite%20Jump.lua"))()
+end)
+end},
+},
+Visual = {
+{name = "4K Shader", cb = function()
+pcall(function()
+for i, v in pairs(Lighting:GetChildren()) do if v:IsA("PostEffect") or v:IsA("Sky") or v:IsA("Atmosphere") then v:Destroy() end end
+local Bloom = Instance.new("BloomEffect"); Bloom.Parent = Lighting
+local Blur = Instance.new("BlurEffect"); Blur.Parent = Lighting
+local ColorCor = Instance.new("ColorCorrectionEffect"); ColorCor.Parent = Lighting
+local SunRays = Instance.new("SunRaysEffect"); SunRays.Parent = Lighting
+local Sky = Instance.new("Sky"); Sky.Parent = Lighting
+local Atm = Instance.new("Atmosphere"); Atm.Parent = Lighting
+local Gui = Instance.new("ScreenGui"); Gui.Parent = StarterGui; Gui.IgnoreGuiInset = true
+local ShadowFrame = Instance.new("ImageLabel"); ShadowFrame.Parent = Gui
+ShadowFrame.AnchorPoint = Vector2.new(0.5,1); ShadowFrame.Position = UDim2.new(0.5,0,1,0)
+ShadowFrame.Size = UDim2.new(1,0,1.05,0); ShadowFrame.BackgroundTransparency = 1
+ShadowFrame.Image = "rbxassetid://4576475446"; ShadowFrame.ImageTransparency = 0.3; ShadowFrame.ZIndex = 10
+Bloom.Intensity = 0.3; Bloom.Size = 10; Bloom.Threshold = 0.8; Blur.Size = 5
+ColorCor.Brightness = 0.1; ColorCor.Contrast = 0.5; ColorCor.Saturation = -0.3; ColorCor.TintColor = rgb(255,235,203)
+SunRays.Intensity = 0.075; SunRays.Spread = 0.727
+Sky.SkyboxBk = "http://www.roblox.com/asset/?id=151165214"; Sky.SkyboxDn = "http://www.roblox.com/asset/?id=151165197"
+Sky.SkyboxFt = "http://www.roblox.com/asset/?id=151165224"; Sky.SkyboxLf = "http://www.roblox.com/asset/?id=151165191"
+Sky.SkyboxRt = "http://www.roblox.com/asset/?id=151165206"; Sky.SkyboxUp = "http://www.roblox.com/asset/?id=151165227"
+Lighting.Ambient = rgb(2,2,2); Lighting.Brightness = 2.25; Lighting.GlobalShadows = true
+Lighting.OutdoorAmbient = rgb(0,0,0); Lighting.ClockTime = 17; Lighting.GeographicLatitude = 45
+Atm.Density = 0.364; Atm.Offset = 0.556; Atm.Color = rgb(199,175,166); Atm.Decay = rgb(44,39,33); Atm.Glare = 0.36; Atm.Haze = 1.72
+end)
+end},
+        {name = "Destroy All Particles", cb = function()
+task.spawn(function()
+for _, o in ipairs(workspace:GetDescendants()) do pcall(function()
+if o:IsA("ParticleEmitter") or o:IsA("Smoke") or o:IsA("Fire") or o:IsA("Sparkles") then o:Destroy() end
+end) end
+end)
+end},
+{name = "Remove Lighting FX", cb = function()
+for _, o in ipairs(Lighting:GetChildren()) do pcall(function() if o:IsA("PostEffect") then o:Destroy() end end) end
+end},
+},
+Misc = {
+{name = "Respawn", cb = function()
+pcall(function() LocalPlayer.Character.Humanoid.Health = 0 end)
+end},
+{name = "Server Hop", cb = function()
+pcall(function()
+local ts = game:GetService("TeleportService")
+local http = game:GetService("HttpService")
+local raw = game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100")
+local data = http:JSONDecode(raw)
+for _, s in ipairs(data.data) do
+if s.playing < s.maxPlayers and s.id ~= game.JobId then
+ts:TeleportToPlaceInstance(game.PlaceId, s.id, LocalPlayer)
+break
+end
+end
+end)
+end},
+{name = "Copy Join Script", cb = function()
+local scriptCode = 'game:GetService("TeleportService"):TeleportToPlaceInstance('..game.PlaceId..', "'..game.JobId..'")'
+if setclipboard then setclipboard(scriptCode) end
+end},
+},
+}
+
+local hubRegistry = {}
+local proxyHubRegistry = {}
+
+local function createHubUI(parent, sName, uid, layoutOrder, isProxy, loadUrl)
+local partPill = Make("Frame", {
+Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg,
+BackgroundTransparency = 0.3, BorderSizePixel = 0,
+LayoutOrder = layoutOrder, Parent = parent,
+})
+partPill:SetAttribute("SearchName", sName)
+Make("UICorner", {CornerRadius = ud(1,0), Parent = partPill})
+Make("TextLabel", {
+Size = ud2(1,-80,1,0), Position = ud2(0,14,0,0),
+BackgroundTransparency = 1, Text = sName,
+TextColor3 = C.textPri, TextSize = 11, Font = reg,
+TextXAlignment = Enum.TextXAlignment.Left, Parent = partPill,
+})
+
+local runBtn = Make("TextButton", {
+Size = ud2(0,42,0,20), Position = ud2(1,-56,0,6),
+BackgroundColor3 = C.accent, BackgroundTransparency = 0.1,
+Text = "Run", TextColor3 = C.white,
+TextSize = 10, Font = bold, Parent = partPill,
+})
+Make("UICorner", {CornerRadius = ud(0,4), Parent = runBtn})
+
+runBtn.MouseButton1Click:Connect(function()
+partState[uid] = true
+pcall(function()
+loadstring(game:HttpGet(loadUrl, true))()
+end)
+runBtn.Text = "Ran!"
+task.delay(1, function() runBtn.Text = "Run" end)
+if rebuildActive then rebuildActive() end
+if rebuildFavorites then rebuildFavorites() end
+end)
+
+local star = Make("TextButton", {
+Size = ud2(0,22,0,22), Position = ud2(1,-102,0,5),
+BackgroundTransparency = 1, Text = "★",
+TextColor3 = cfgFavorites[uid] and C.dot_yel or C.textSec,
+TextSize = 18, Font = bold, Parent = partPill,
+})
+
+star.MouseButton1Click:Connect(function()
+cfgFavorites[uid] = not cfgFavorites[uid]
+local color = cfgFavorites[uid] and C.dot_yel or C.textSec
+star.TextColor3 = color
+if isProxy then
+if hubRegistry[uid] then hubRegistry[uid].star.TextColor3 = color end
+else
+if proxyHubRegistry[uid] then proxyHubRegistry[uid].star.TextColor3 = color end
+end
+triggerAutoSave()
+if rebuildFavorites then rebuildFavorites() end
+end)
+
+if isProxy then
+proxyHubRegistry[uid] = { star = star, pill = partPill }
+else
+hubRegistry[uid] = { star = star, name = sName, pill = partPill, loadUrl = loadUrl }
+end
+return partPill
+end
+
+local hubSections = {
+{
+name = "Game",
+scripts = {
+{name = "MVSD", url = "https://www.vaporscripts.xyz/VaporMvsd", wrapLoad = true},
+}
+},
+{
+name = "Script",
+scripts = {
+{name = "AK", url = "https://absent.wtf/AKADMIN.lua", wrapLoad = false},
+{name = "Wisl Universal", url = "https://raw.githubusercontent.com/WislUniversal/script/refs/heads/main/Universal.lua", wrapLoad = true},
+{name = "Fling", url = "https://glot.io/snippets/h86gnsdgud/raw/FlingGui.lua", wrapLoad = false},
+        {name = "Infinite-Yield", url = "https://raw.githubusercontent.com/mike9993/Infinite-Yield-FE/refs/heads/main/Infinite%20Yield%20FE.lua", wrapLoad = false},
+        {name = "Emotes/Animations", url = "https://fourhub13.vercel.app/Emotes.lua", wrapLoad = false},
+}
+},
+{
+name = "UN",
+scripts = {
+{name = "UNScripts fling", url = "https://raw.githubusercontent.com/mike9993/UNscript-fling-/refs/heads/main/FlingScript.1.lua", wrapLoad = false},
+{name = "UNTapFling", url = "https://raw.githubusercontent.com/mike9993/TapFling/refs/heads/main/FlingScriptUN.3.txt", wrapLoad = false},
+}
+},
+}
+
+-- Teleport player list and checkpoint system
+local tpCards = {}
+local tpWaypoints = {}
+local cpWaypointColor = rgb(255,100,100)
+
+local function lookupSliderParams(uid)
+for secName, sliders in pairs(sectionSliderFeatures) do
+for _, sData in ipairs(sliders) do
+local candidate = "Scripts_" .. secName .. "_slider_" .. sData.name
+if candidate == uid then
+return { label = sData.name, minV = sData.min, maxV = sData.max, defaultV = sData.default, callback = sData.cb }
+end
+end
+end
+return nil
+end
+
+function rebuildFavorites()
+if not favSectionObj then return end
+for _, child in ipairs(favSectionObj.Content:GetChildren()) do
+if child:IsA("Frame") or child:IsA("TextLabel") or child:IsA("TextButton") then
+child:Destroy()
+end
+end
+proxyToggles = {}
+proxyHubRegistry = {}
+
+local count = 0
+local favList = {}
+for uid, isFav in pairs(cfgFavorites) do
+if isFav == true and uid ~= "" then
+local hasSource = originalToggles[uid] or hubRegistry[uid] or buttonParams[uid] or sliderFavObj[uid] or sliderParams[uid] or lookupSliderParams(uid)
+if hasSource then
+table.insert(favList, uid)
+end
+end
+end
+table.sort(favList)
+
+for i, uid in ipairs(favList) do
+local rendered = false
+if originalToggles[uid] then
+local pName = originalToggles[uid].name
+createTogglePart(favSectionObj.Content, pName, uid, i, true)
+count = count + 1
+rendered = true
+end
+if not rendered and hubRegistry[uid] then
+local sData = hubRegistry[uid]
+createHubUI(favSectionObj.Content, sData.name, uid, i, true, sData.loadUrl)
+count = count + 1
+rendered = true
+end
+if not rendered and buttonParams[uid] then
+local bData = buttonParams[uid]
+makeButton(favSectionObj.Content, bData.name, bData.callback, uid, true, i)
+count = count + 1
+rendered = true
+end
+if not rendered then
+local params = sliderParams[uid] or lookupSliderParams(uid)
+if params then
+makeSlider(favSectionObj.Content, params.label, params.minV, params.maxV, params.defaultV, params.callback, uid, true, i)
+count = count + 1
+rendered = true
+end
+end
+if not rendered and sliderFavObj[uid] then
+local sData = sliderFavObj[uid]
+local item = Make("Frame", {
+Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg,
+BackgroundTransparency = 0.3, BorderSizePixel = 0,
+LayoutOrder = i, Parent = favSectionObj.Content,
+})
+item:SetAttribute("SearchName", sData.name)
+Make("UICorner", {CornerRadius = ud(1,0), Parent = item})
+Make("TextLabel", {
+Size = ud2(1,-80,1,0), Position = ud2(0,14,0,0),
+BackgroundTransparency = 1, Text = sData.name .. " (" .. tostring(sData.getVal()) .. ")",
+TextColor3 = C.textPri, TextSize = 11, Font = reg,
+TextXAlignment = Enum.TextXAlignment.Left, Parent = item,
+})
+local star = Make("TextButton", {
+Size = ud2(0,24,0,24), Position = ud2(1,-34,0,4),
+BackgroundTransparency = 1, Text = "★",
+TextColor3 = C.dot_yel, TextSize = 18, Font = bold, Parent = item,
+})
+star.MouseButton1Click:Connect(function()
+cfgFavorites[uid] = false
+cfgSliderFavs[uid] = nil
+if sliderFavObj[uid] and sliderFavObj[uid].star then
+sliderFavObj[uid].star.TextColor3 = C.textSec
+end
+triggerAutoSave()
+rebuildFavorites()
+end)
+count = count + 1
+rendered = true
+end
+end
+
+local emptyLabel = favSectionObj.Content:FindFirstChild("FavEmptyLabel")
+if count == 0 then
+if not emptyLabel then
+Make("TextLabel", {
+Name = "FavEmptyLabel",
+Size = ud2(1,-8,0,28), BackgroundTransparency = 1,
+Text = "No favorites", TextColor3 = C.textSec,
+TextSize = 11, Font = reg, LayoutOrder = 0, Parent = favSectionObj.Content,
+})
+end
+else
+if emptyLabel then emptyLabel:Destroy() end
+end
+
+favSectionObj.resizeToContent()
+
+local ch = favSectionObj.Content.Size.Y.Offset
+local totalH = SECTION_H + 4 + ch
+if favSectionObj.IsOpen() then
+favSectionObj.Wrapper.Size = ud2(1,-16,0,totalH)
+end
+
+task.delay(0.15, function()
+if favSectionObj then
+favSectionObj.resizeToContent()
+local ch2 = favSectionObj.Content.Size.Y.Offset
+local totalH2 = SECTION_H + 4 + ch2
+if favSectionObj.IsOpen() then
+favSectionObj.Wrapper.Size = ud2(1,-16,0,totalH2)
+end
+end
+end)
+end
+
+function rebuildActive()
+if not activeSectionObj then return end
+for _, child in ipairs(activeSectionObj.Content:GetChildren()) do
+if child:IsA("Frame") then child:Destroy() end
+end
+
+local count = 0
+local activeList = {}
+for uid, isOn in pairs(partState) do
+if isOn and (originalToggles[uid] or hubRegistry[uid] or sliderFavObj[uid]) then
+table.insert(activeList, uid)
+end
+end
+table.sort(activeList)
+
+for i, uid in ipairs(activeList) do
+local data = originalToggles[uid] or hubRegistry[uid] or sliderFavObj[uid]
+local pName = data.name
+
+local item = Make("Frame", {
+Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg,
+BackgroundTransparency = 0.3, BorderSizePixel = 0,
+LayoutOrder = i, Parent = activeSectionObj.Content,
+})
+item:SetAttribute("SearchName", pName)
+Make("UICorner", {CornerRadius = ud(1,0), Parent = item})
+
+local statusDot = Make("Frame", {
+Size = ud2(0,8,0,8), Position = ud2(0,14,0,12),
+BackgroundColor3 = C.dot_grn, BorderSizePixel = 0, Parent = item,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = statusDot})
+
+Make("TextLabel", {
+Size = ud2(1,-100,1,0), Position = ud2(0,30,0,0),
+BackgroundTransparency = 1, Text = pName,
+TextColor3 = C.textPri, TextSize = 11, Font = reg,
+TextXAlignment = Enum.TextXAlignment.Left, Parent = item,
+})
+
+local disableBtn = Make("TextButton", {
+Size = ud2(0,52,0,20), Position = ud2(1,-66,0,6),
+BackgroundColor3 = C.dot_red, BackgroundTransparency = 0.15,
+Text = "Disable", TextColor3 = C.white,
+TextSize = 10, Font = bold, Parent = item,
+})
+Make("UICorner", {CornerRadius = ud(0,4), Parent = disableBtn})
+
+disableBtn.MouseButton1Click:Connect(function()
+partState[uid] = false
+if data.toggle then data.toggle.SetOn(false, false) end
+if proxyToggles[uid] then proxyToggles[uid].toggle.SetOn(false, false) end
+rebuildActive()
+end)
+
+count = count + 1
+end
+
+local emptyLabel = activeSectionObj.Content:FindFirstChild("ActiveEmptyLabel")
+if count == 0 then
+if not emptyLabel then
+Make("TextLabel", {
+Name = "ActiveEmptyLabel",
+Size = ud2(1,-8,0,28), BackgroundTransparency = 1,
+Text = "No active features", TextColor3 = C.textSec,
+TextSize = 11, Font = reg, LayoutOrder = 0, Parent = activeSectionObj.Content,
+})
+end
+else
+if emptyLabel then emptyLabel:Destroy() end
+end
+
+activeSectionObj.resizeToContent()
+
+if activeSectionObj.IsOpen() then
+local ch = activeSectionObj.Content.Size.Y.Offset
+local totalH = SECTION_H + 4 + ch
+TweenService:Create(activeSectionObj.Wrapper, sectionTween, { Size = ud2(1,-16,0,totalH) }):Play()
+end
+
+task.delay(0.15, function()
+if activeSectionObj then
+activeSectionObj.resizeToContent()
+if activeSectionObj.IsOpen() then
+local ch2 = activeSectionObj.Content.Size.Y.Offset
+local totalH2 = SECTION_H + 4 + ch2
+activeSectionObj.Wrapper.Size = ud2(1,-16,0,totalH2)
+end
+end
+end)
+end
+
+local function updateCollapseAllVisibility()
+if not activeTab then CollapseAllBtn.Visible = false; return end
+local n = 0
+for _, sec in ipairs(tabSections[activeTab]) do
+if sec.IsOpen() then n = n + 1 end
+end
+CollapseAllBtn.Visible = (n > 1)
+end
+
+local function makeSection(sectionName, parentContainer, tabKey, isFavSection, isActiveSection, hubScripts)
+local wrapper = Make("Frame", {
+Size = ud2(1,-16,0,SECTION_H), BackgroundTransparency = 1,
+ClipsDescendants = true, Parent = parentContainer,
+})
+local header = Make("Frame", {
+Size = ud2(1,0,0,SECTION_H), BackgroundColor3 = C.surface,
+BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = wrapper,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = header})
+local arrow = Make("TextLabel", {
+Size = ud2(0,28,1,0), Position = ud2(0,10,0,0),
+BackgroundTransparency = 1, Text = "+", TextColor3 = C.textSec,
+TextSize = 18, Font = bold, Parent = header,
+})
+local titleLbl = Make("TextLabel", {
+Size = ud2(1,-50,1,0), Position = ud2(0,32,0,0),
+BackgroundTransparency = 1, Text = sectionName,
+TextColor3 = C.textPri, TextSize = 12, Font = bold,
+TextXAlignment = Enum.TextXAlignment.Left, Parent = header,
+})
+
+local content = Make("Frame", {
+Size = ud2(1,0,0,0), Position = ud2(0,0,0,SECTION_H+4),
+BackgroundTransparency = 1, ClipsDescendants = true, Parent = wrapper,
+})
+Make("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Padding = ud(0,5), Parent = content})
+
+local isOpen = false
+local obj = {
+Wrapper = wrapper, Content = content, TitleLabel = titleLbl,
+IsOpen = function() return isOpen end, Name = sectionName,
+resizeToContent = function()
+local layout = content:FindFirstChildOfClass("UIListLayout")
+local h = layout and layout.AbsoluteContentSize.Y or 0
+if h <= 0 then
+h = 0
+local pad = (layout and layout.Padding.Offset) or 5
+for _, child in ipairs(content:GetChildren()) do
+if child:IsA("GuiObject") and child.Visible then
+local sy = child.Size.Y.Offset
+if sy <= 0 then
+if child:IsA("Frame") then sy = PART_H
+elseif child:IsA("TextLabel") then sy = LABEL_H
+else sy = 32 end
+end
+h = h + sy + pad
+end
+end
+end
+content.Size = ud2(1,0,0, h)
+end,
+}
+
+if isActiveSection then
+activeSectionObj = obj
+elseif isFavSection then
+favSectionObj = obj
+elseif hubScripts then
+for i, script in ipairs(hubScripts) do
+local uid = tabKey .. "_" .. sectionName .. "_" .. script.name
+createHubUI(content, script.name, uid, i, false, script.url)
+end
+obj.resizeToContent()
+    elseif tabKey == "Scripts" and sectionName == "Teleport" then
+        -- Teleport section: TPTool toggle + auto-refresh player list + checkpoints
+        local tpUid = tabKey .. "_" .. sectionName .. "_TPTool"
+        createTogglePart(content, "TPTool", tpUid, 1, false)
+
+        local function refreshPlayerList()
+for _, c in ipairs(tpCards) do pcall(function() c:Destroy() end) end
+tpCards = {}
+local order = 3
+for _, p in ipairs(Players:GetPlayers()) do
+if p ~= LocalPlayer then
+local row = Make("Frame", {
+Size = ud2(1,-8,0,38), BackgroundColor3 = C.part_bg,
+BackgroundTransparency = 0.3, BorderSizePixel = 0,
+LayoutOrder = order, Parent = content,
+})
+row:SetAttribute("SearchName", p.Name)
+Make("UICorner", {CornerRadius = ud(1,0), Parent = row})
+Make("TextLabel", {
+Size = ud2(1,-90,1,0), Position = ud2(0,14,0,0),
+BackgroundTransparency = 1, Text = p.Name,
+TextColor3 = C.textPri, TextSize = 11, Font = reg,
+TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
+})
+local tpBtn = Make("TextButton", {
+Size = ud2(0,70,0,22), Position = ud2(1,-80,0.5,-11),
+BackgroundColor3 = C.accent, BackgroundTransparency = 0.1,
+Text = "TP", TextColor3 = C.white,
+TextSize = 10, Font = bold, Parent = row,
+})
+Make("UICorner", {CornerRadius = ud(0,4), Parent = tpBtn})
+tpBtn.MouseButton1Click:Connect(function()
+pcall(function()
+local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+local thRoot = p.Character and p.Character:FindFirstChild("HumanoidRootPart")
+if myRoot and thRoot then
+myRoot.CFrame = thRoot.CFrame * CFrame.new(0,0,3)
+end
+end)
+end)
+table.insert(tpCards, row)
+order = order + 1
+end
+end
+obj.resizeToContent()
+end
+
+refreshPlayerList()
+task.spawn(function()
+while task.wait(5) do
+if content and content.Parent then refreshPlayerList() end
+end
+end)
+
+-- Checkpoint system
+local cpHeader = Make("TextLabel", {
+Size = ud2(1,-8,0,22), BackgroundTransparency = 1,
+Text = "CHECKPOINTS", TextColor3 = C.textSec,
+TextSize = 10, Font = bold, LayoutOrder = 100, Parent = content,
+})
+
+local cpNameBox = Make("TextBox", {
+Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg,
+BackgroundTransparency = 0.3, BorderSizePixel = 0,
+PlaceholderText = "Checkpoint name...", PlaceholderColor3 = C.textSec,
+Text = "", TextColor3 = C.textPri, TextSize = 11, Font = reg,
+TextXAlignment = Enum.TextXAlignment.Left, LayoutOrder = 101, Parent = content,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = cpNameBox})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = cpNameBox})
+
+local cpColorRow = Make("Frame", {
+Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg,
+BackgroundTransparency = 0.3, BorderSizePixel = 0,
+LayoutOrder = 102, Parent = content,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = cpColorRow})
+Make("TextLabel", {
+Size = ud2(1,-90,1,0), Position = ud2(0,14,0,0),
+BackgroundTransparency = 1, Text = "Checkpoint Color",
+TextColor3 = C.textPri, TextSize = 11, Font = reg,
+TextXAlignment = Enum.TextXAlignment.Left, Parent = cpColorRow,
+})
+local cpColorSwatch = Make("TextButton", {
+Size = ud2(0,80,0,20), Position = ud2(1,-90,0.5,-10),
+BackgroundColor3 = cpWaypointColor, Text = "",
+BorderSizePixel = 0, Parent = cpColorRow,
+})
+Make("UICorner", {CornerRadius = ud(0,4), Parent = cpColorSwatch})
+local cpColorsList = {
+rgb(255,100,100), rgb(100,255,100), rgb(100,100,255),
+rgb(255,255,100), rgb(255,100,255), rgb(100,255,255), rgb(255,255,255)
+}
+local cpColorIdx = 1
+cpColorSwatch.MouseButton1Click:Connect(function()
+cpColorIdx = cpColorIdx + 1; if cpColorIdx > #cpColorsList then cpColorIdx = 1 end
+cpWaypointColor = cpColorsList[cpColorIdx]
+cpColorSwatch.BackgroundColor3 = cpWaypointColor
+end)
+
+local saveCpBtn = Make("TextButton", {
+Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.accent,
+BackgroundTransparency = 0.1, Text = "Save Checkpoint",
+TextColor3 = C.white, TextSize = 11, Font = bold,
+LayoutOrder = 103, Parent = content,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = saveCpBtn})
+saveCpBtn.MouseButton1Click:Connect(function()
+local name = cpNameBox.Text
+if name == "" then name = "Waypoint #"..#tpWaypoints+1 end
+local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+if root then
+table.insert(tpWaypoints, {Name = name, CFrame = root.CFrame, Color = cpWaypointColor})
+-- Rebuild waypoint list
+for _, c in ipairs(content:GetChildren()) do
+if c:IsA("Frame") and c:FindFirstChild("WpDelBtn") then c:Destroy() end
+end
+for i, wp in ipairs(tpWaypoints) do
+local wrow = Make("Frame", {
+Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg,
+BackgroundTransparency = 0.3, BorderSizePixel = 0,
+LayoutOrder = 200 + i, Parent = content,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = wrow})
+local dot = Make("Frame", {
+Size = ud2(0,4,1,0), BackgroundColor3 = wp.Color,
+BorderSizePixel = 0, Parent = wrow,
+})
+Make("UICorner", {CornerRadius = ud(0,8), Parent = dot})
+Make("TextLabel", {
+Size = ud2(1,-140,1,0), Position = ud2(0,14,0,0),
+BackgroundTransparency = 1, Text = wp.Name,
+TextColor3 = C.textPri, TextSize = 11, Font = reg,
+TextXAlignment = Enum.TextXAlignment.Left, Parent = wrow,
+})
+local wtpBtn = Make("TextButton", {
+Size = ud2(0,52,0,20), Position = ud2(1,-125,0.5,-10),
+BackgroundColor3 = C.accent, BackgroundTransparency = 0.1,
+Text = "TP", TextColor3 = C.white,
+TextSize = 10, Font = bold, Parent = wrow,
+})
+Make("UICorner", {CornerRadius = ud(0,4), Parent = wtpBtn})
+wtpBtn.MouseButton1Click:Connect(function()
+pcall(function()
+local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+if root then root.CFrame = wp.CFrame end
+end)
+end)
+local wdelBtn = Make("TextButton", {
+Name = "WpDelBtn",
+Size = ud2(0,22,0,20), Position = ud2(1,-32,0.5,-10),
+BackgroundColor3 = C.dot_red, BackgroundTransparency = 0.15,
+Text = "X", TextColor3 = C.white,
+TextSize = 10, Font = bold, Parent = wrow,
+})
+Make("UICorner", {CornerRadius = ud(0,4), Parent = wdelBtn})
+wdelBtn.MouseButton1Click:Connect(function()
+table.remove(tpWaypoints, i)
+wrow:Destroy()
+end)
+end
+end
+end)
+
+obj.resizeToContent()
+elseif tabKey == "Scripts" then
+-- Build feature list for this section
+local layoutOrder = 1
+
+-- Toggles
+local toggles = sectionToggleFeatures[sectionName] or {}
+for _, tName in ipairs(toggles) do
+local uid = tabKey .. "_" .. sectionName .. "_" .. tName
+createTogglePart(content, tName, uid, layoutOrder, false)
+layoutOrder = layoutOrder + 1
+end
+
+-- Sliders
+local sliders = sectionSliderFeatures[sectionName] or {}
+for _, sData in ipairs(sliders) do
+local sliderUid = tabKey .. "_" .. sectionName .. "_slider_" .. sData.name
+makeSlider(content, sData.name, sData.min, sData.max, sData.default, sData.cb, sliderUid)
+layoutOrder = layoutOrder + 1
+end
+
+			-- Buttons
+			local buttons = sectionButtonFeatures[sectionName] or {}
+			for _, bData in ipairs(buttons) do
+				local btnUid = tabKey .. "_" .. sectionName .. "_btn_" .. bData.name
+				makeButton(content, bData.name, bData.cb, btnUid)
+				layoutOrder = layoutOrder + 1
+			end
+
+obj.resizeToContent()
+end
+
+local function setOpen(state)
+isOpen = state
+arrow.Text = isOpen and "-" or "+"
+if isOpen then obj.resizeToContent() end
+local ch = content.Size.Y.Offset
+local totalH = SECTION_H + 4 + ch
+if isOpen then
+wrapper.Size = ud2(1,-16,0,totalH)
+else
+TweenService:Create(wrapper, sectionTween, {
+Size = ud2(1,-16,0,SECTION_H)
+}):Play()
+end
+if isOpen then
+task.delay(0.15, function()
+obj.resizeToContent()
+local ch2 = content.Size.Y.Offset
+local totalH2 = SECTION_H + 4 + ch2
+wrapper.Size = ud2(1,-16,0,totalH2)
+end)
+end
+updateCollapseAllVisibility()
+end
+obj.SetOpen = setOpen
+
+local hBtn = Make("TextButton", {
+Size = ud2(1,0,1,0), BackgroundTransparency = 1, Text = "", Parent = header,
+})
+hBtn.MouseButton1Click:Connect(function() setOpen(not isOpen) end)
+
+table.insert(tabSections[tabKey], obj)
+return obj
+end
+
+local sectionNames = {"Movement", "Aim Assist", "Teleport", "Visual", "ESP", "Misc"}
+
+local function buildTabContainer(visible)
+local c = Make("Frame", {
+Size = ud2(1,0,0,0), BackgroundTransparency = 1,
+AutomaticSize = Enum.AutomaticSize.Y,
+Visible = visible, Parent = SectionScroll,
+})
+Make("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Padding = ud(0,0), Parent = c})
+return c
+end
+
+local homeContainer = buildTabContainer(true)
+local k2k1Container = buildTabContainer(false)
+local k2Container   = buildTabContainer(false)
+
+makeSection("Active", homeContainer, "Home", false, true)
+makeSection("Favorites", homeContainer, "Home", true, false)
+
+for _, sName in ipairs(sectionNames) do
+makeSection(sName, k2k1Container, "Scripts", false, false)
+end
+
+for _, hubSec in ipairs(hubSections) do
+makeSection(hubSec.name, k2Container, "Hubs", false, false, hubSec.scripts)
+end
+
+rebuildFavorites()
+rebuildActive()
+
+CollapseAllBtn.MouseButton1Click:Connect(function()
+if not activeTab then return end
+for _, sec in ipairs(tabSections[activeTab]) do
+if sec.IsOpen() then sec.SetOpen(false) end
+end
+end)
+
+local switchTab
+
+local ShortcutModal = Make("Frame", {
+Size = ud2(0,260,0,160), Position = ud2(0.5,0,0.5,0),
+AnchorPoint = Vector2.new(0.5,0.5), BackgroundColor3 = C.bg,
+BackgroundTransparency = uiTransparency, BorderSizePixel = 0,
+Active = true, Visible = false, ZIndex = 50, Parent = Gui,
+})
+Make("UICorner", {CornerRadius = ud(0,16), Parent = ShortcutModal})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.5, Parent = ShortcutModal})
+local ModalScale  = Make("UIScale", {Scale = 1, Parent = ShortcutModal})
+local ModalHeader = Make("Frame", {
+Size = ud2(1,0,0,32), BackgroundTransparency = 1,
+BorderSizePixel = 0, Parent = ShortcutModal,
+})
+local ModalCloseBtn = makeDot(14, C.dot_red, ModalHeader)
+local ModalMaxBtn   = makeDot(32, C.dot_grn, ModalHeader)
+local ShortcutModalText = Make("TextLabel", {
+Size = ud2(1,-40,1,-32), Position = ud2(0,20,0,32),
+BackgroundTransparency = 1, Text = "",
+TextColor3 = C.textPri, TextSize = 13, Font = reg,
+TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, Parent = ShortcutModal,
+})
+
+local function updateModalText()
+local t = "[ " .. activeKeybind[1].Name .. " + " .. activeKeybind[2].Name .. " ]"
+ShortcutModalText.Text = "Shortcut Info:\n\nCurrent Bind: " .. t .. "\n\nHold the first key then press the second key to toggle the main interface open or closed dynamically."
+end
+updateModalText()
+
+local modalExpanded = false
+ModalCloseBtn.MouseButton1Click:Connect(function() ShortcutModal.Visible = false end)
+ModalMaxBtn.MouseButton1Click:Connect(function()
+modalExpanded = not modalExpanded
+TweenService:Create(ModalScale, TweenInfo.new(0.2,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),
+{Scale = modalExpanded and 1.2 or 1}):Play()
+end)
+
+local isListeningForKeybind = false
+local tempKeys              = {}
+
+Make("TextLabel", {
+Size = ud2(1,0,0,42), BackgroundTransparency = 1, Text = "Settings",
+TextColor3 = C.textPri, TextSize = 16, Font = bold,
+TextXAlignment = Enum.TextXAlignment.Center, Parent = SetPage,
+})
+
+local SettingsTabBar = Make("Frame", {
+Size = ud2(1,-24,0,30), Position = ud2(0,12,0,42),
+BackgroundTransparency = 1, Parent = SetPage,
+})
+Make("UIListLayout", {
+FillDirection = Enum.FillDirection.Horizontal,
+HorizontalAlignment = Enum.HorizontalAlignment.Center,
+Padding = ud(0,6), Parent = SettingsTabBar,
+})
+
+local function makeSettingsTab(name, width)
+local btn = Make("TextButton", {
+Size = ud2(0,width or 75,0,26), BackgroundColor3 = C.surfaceAlt,
+BackgroundTransparency = 0.5, Text = name,
+TextColor3 = C.textSec, TextSize = 10, Font = bold, Parent = SettingsTabBar,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = btn})
+local pill = Make("Frame", {
+Size = ud2(0,0,0,2), Position = ud2(0.5,0,1,-2),
+AnchorPoint = Vector2.new(0.5,0), BackgroundColor3 = C.accent,
+BorderSizePixel = 0, Parent = btn,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = pill})
+return {Button = btn, Pill = pill}
+end
+
+local sTab = {}
+sTab.Shortcuts     = makeSettingsTab("Shortcuts")
+sTab.Themes        = makeSettingsTab("Themes")
+sTab.Scripts       = makeSettingsTab("Scripts", 80)
+
+local function makeSetScroll(visible)
+local s = Make("ScrollingFrame", {
+Size = ud2(1,-24,1,-78), Position = ud2(0,12,0,78),
+BackgroundTransparency = 1, BorderSizePixel = 0,
+ScrollBarThickness = 2, ScrollBarImageColor3 = C.border,
+CanvasSize = ud2(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y,
+Active = true, Visible = visible, Parent = SetPage,
+})
+Make("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Padding = ud(0,5), Parent = s})
+return s
+end
+
+local ScrollShortcuts     = makeSetScroll(true)
+local ScrollThemes        = makeSetScroll(false)
+local ScrollScripts       = makeSetScroll(false)
+
+local activeSettingsTab = "Shortcuts"
+
+local function switchSettingsTab(name)
+if activeSettingsTab == name then return end
+activeSettingsTab = name
+ScrollShortcuts.Visible     = (name == "Shortcuts")
+ScrollThemes.Visible        = (name == "Themes")
+ScrollScripts.Visible       = (name == "Scripts")
+for key, tab in pairs(sTab) do
+local active = (key == name)
+TweenService:Create(tab.Pill, tabTween, { Size = active and ud2(0,40,0,2) or ud2(0,0,0,2) }):Play()
+TweenService:Create(tab.Button, tabTween, { TextColor3 = active and C.textPri or C.textSec, BackgroundTransparency = active and 0.2 or 0.5 }):Play()
+end
+end
+
+sTab.Shortcuts.Button.MouseButton1Click:Connect(function()     switchSettingsTab("Shortcuts") end)
+sTab.Themes.Button.MouseButton1Click:Connect(function()        switchSettingsTab("Themes") end)
+sTab.Scripts.Button.MouseButton1Click:Connect(function()       switchSettingsTab("Scripts") end)
+
+local function makeSetSection(parent, title, contentH, startOpen)
+local wrapper = Make("Frame", {
+Size = ud2(1,-16,0,SECTION_H), BackgroundTransparency = 1,
+ClipsDescendants = true, Parent = parent,
+})
+local header = Make("Frame", {
+Size = ud2(1,0,0,SECTION_H), BackgroundColor3 = C.surface,
+BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = wrapper,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = header})
+local arrow = Make("TextLabel", {
+Size = ud2(0,28,1,0), Position = ud2(0,10,0,0),
+BackgroundTransparency = 1, Text = startOpen and "-" or "+",
+TextColor3 = C.textSec, TextSize = 18, Font = bold, Parent = header,
+})
+Make("TextLabel", {
+Size = ud2(1,-50,1,0), Position = ud2(0,32,0,0),
+BackgroundTransparency = 1, Text = title,
+TextColor3 = C.textPri, TextSize = 12, Font = bold,
+TextXAlignment = Enum.TextXAlignment.Left, Parent = header,
+})
+local totalH = SECTION_H + 4 + contentH
+if startOpen then wrapper.Size = ud2(1,-16,0,totalH) end
+local isOpen = startOpen == true
+local hBtn = Make("TextButton", {
+Size = ud2(1,0,1,0), BackgroundTransparency = 1, Text = "", Parent = header,
+})
+hBtn.MouseButton1Click:Connect(function()
+isOpen = not isOpen
+arrow.Text = isOpen and "-" or "+"
+TweenService:Create(wrapper, sectionTween, {
+Size = ud2(1,-16,0, isOpen and totalH or SECTION_H)
+}):Play()
+end)
+local content = Make("Frame", {
+Size = ud2(1,0,0,contentH), Position = ud2(0,0,0,SECTION_H+4),
+BackgroundTransparency = 1, ClipsDescendants = true, Parent = wrapper,
+})
+return wrapper, content
+end
+
+local _, ShortcutSecContent = makeSetSection(ScrollShortcuts, "Close and open UI", PART_H+5, true)
+local ShortcutItemPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = ShortcutSecContent })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = ShortcutItemPill})
+Make("TextLabel", { Size = ud2(0,120,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Toggle UI Keybind", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = ShortcutItemPill })
+local KeybindBtn = Make("TextButton", { Size = ud2(0,110,0,22), Position = ud2(1,-145,0,5), BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1, Text = "[ " .. activeKeybind[1].Name .. " + " .. activeKeybind[2].Name .. " ]", TextColor3 = C.textPri, TextSize = 11, Font = bold, Parent = ShortcutItemPill })
+Make("UICorner", {CornerRadius = ud(0,4), Parent = KeybindBtn})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = KeybindBtn})
+KeybindBtn.MouseButton1Click:Connect(function()
+if not isListeningForKeybind then
+isListeningForKeybind = true
+tempKeys = {}
+KeybindBtn.Text = "[ Press 1st Key ]"
+KeybindBtn.TextColor3 = C.dot_yel
+end
+end)
+
+local themeContentH = 90
+local _, ThemeSecContent = makeSetSection(ScrollThemes, "Appearance", themeContentH, true)
+
+local ModePill = Make("Frame", { Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = ThemeSecContent })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = ModePill})
+Make("TextLabel", { Size = ud2(0,120,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Light Mode", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = ModePill })
+makeToggle(ModePill, (PART_H-18)/2, function(on)
+cfgLightMode = on
+applyTheme()
+triggerAutoSave()
+end, cfgLightMode)
+
+local SliderPill = Make("Frame", { Size = ud2(1,-8,0,45), Position=ud2(0,0,0,PART_H+5), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = ThemeSecContent })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = SliderPill})
+Make("TextLabel", { Size = ud2(0,120,0,20), Position = ud2(0,14,0,6), BackgroundTransparency = 1, Text = "Menu Transparency", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SliderPill })
+local SliderValueLbl = Make("TextLabel", { Size = ud2(0,36,0,20), Position = ud2(1,-50,0,6), BackgroundTransparency = 1, Text = math.floor(cfgTransparency/0.85*100+0.5).."%", TextColor3 = C.textSec, TextSize = 10, Font = bold, TextXAlignment = Enum.TextXAlignment.Right, Parent = SliderPill })
+local SliderTrack = Make("Frame", { Size = ud2(1,-28,0,6), Position = ud2(0,14,0,32), BackgroundColor3 = C.toggle_off, BackgroundTransparency = 0.2, BorderSizePixel = 0, Parent = SliderPill })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = SliderTrack})
+local initFrac = cfgTransparency / 0.85
+local SliderFill = Make("Frame", { Size = ud2(initFrac,0,1,0), BackgroundColor3 = C.accent, BackgroundTransparency = 0, BorderSizePixel = 0, Parent = SliderTrack })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = SliderFill})
+local SliderKnob = Make("TextButton", { Size = ud2(0,14,0,14), Position = ud2(initFrac,-7,0,-4), BackgroundColor3 = C.knob, BorderSizePixel = 0, Text = "", Parent = SliderTrack })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = SliderKnob})
+Make("UIStroke", {Color = rgb(80,80,80), Thickness = 1, Transparency = 0.3, Parent = SliderKnob})
+
+local sliderDragging = false
+
+local function updateSlider(inputX)
+local relX   = inputX - SliderTrack.AbsolutePosition.X
+local frac   = math.clamp(relX / SliderTrack.AbsoluteSize.X, 0, 1)
+SliderFill.Size = ud2(frac, 0, 1, 0)
+SliderKnob.Position = ud2(frac, -7, 0, -4)
+SliderValueLbl.Text = math.floor(frac * 100 + 0.5).."%"
+applyTransparency(frac * 0.85)
+end
+
+SliderKnob.InputBegan:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+sliderDragging = true
+end
+end)
+
+local SliderHitbox = Make("TextButton", { Size = ud2(1,0,1,20), Position = ud2(0,0,0,-7), BackgroundTransparency = 1, Text = "", ZIndex = SliderKnob.ZIndex - 1, Parent = SliderTrack })
+SliderHitbox.InputBegan:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+sliderDragging = true; updateSlider(input.Position.X)
+end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+if sliderDragging then sliderDragging = false; triggerAutoSave() end
+end
+end)
+UserInputService.InputChanged:Connect(function(input)
+if sliderDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+updateSlider(input.Position.X)
+end
+end)
+
+local scriptsContentH = 120
+local scriptWrapper, ScriptSecContent = makeSetSection(ScrollScripts, "Persistence Settings", scriptsContentH, true)
+
+local SaveInvPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = ScriptSecContent })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = SaveInvPill})
+Make("TextLabel", { Size = ud2(0,120,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Save Inventory", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SaveInvPill })
+
+local SaveModePill = Make("Frame", { Size = ud2(1,-8,0,PART_H), Position=ud2(0,0,0,PART_H+5), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = ScriptSecContent })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = SaveModePill})
+local SaveModeLbl = Make("TextLabel", { Size = ud2(0,120,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Restore: " .. cfgSaveMode, TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SaveModePill })
+
+makeToggle(SaveInvPill, (PART_H-18)/2, function(on)
+cfgSaveInventory = on
+SaveModePill.Visible = on
+triggerAutoSave()
+end, cfgSaveInventory)
+SaveModePill.Visible = cfgSaveInventory
+
+makeToggle(SaveModePill, (PART_H-18)/2, function(on)
+cfgSaveMode = on and "Favored" or "All"
+SaveModeLbl.Text = "Restore: " .. cfgSaveMode
+triggerAutoSave()
+end, cfgSaveMode == "Favored")
+
+local ManualSaveBtn = Make("TextButton", { Size = ud2(1,-8,0,PART_H), Position=ud2(0,0,0,(PART_H*2)+10), BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1, Text = "Force Manual Save", TextColor3 = C.textPri, TextSize = 11, Font = bold, Parent = ScriptSecContent })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = ManualSaveBtn})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = ManualSaveBtn})
+ManualSaveBtn.MouseButton1Click:Connect(function()
+trackCurrentState()
+ManualSaveBtn.Text = "Saved Successfully!"
+task.delay(1, function() ManualSaveBtn.Text = "Force Manual Save" end)
+end)
+
+transparencyFrames = {
+{frame = Main,          base = 0,    radius = UDim.new(0, 16)},
+{frame = PillUI,        base = 0,    radius = UDim.new(1, 0)},
+{frame = ShortcutModal, base = 0,    radius = UDim.new(0, 16)},
+}
+applyTransparency(cfgTransparency)
+applyTheme()
+
+local function makeDraggableReal(object, handle)
+local dragging = false
+local relative = Vector2.zero
+local insetOff = Vector2.zero
+local sg = object:FindFirstAncestorWhichIsA("ScreenGui")
+if sg and sg.IgnoreGuiInset then
+local ok, inset = pcall(function() return GuiService:GetGuiInset() end)
+if ok then insetOff = insetOff + inset end
+end
+handle.InputBegan:Connect(function(input, processed)
+if processed then return end
+if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+dragging = true
+relative = Vector2.new(object.AbsolutePosition.X, object.AbsolutePosition.Y)
++ Vector2.new(object.AbsoluteSize.X * object.AnchorPoint.X, object.AbsoluteSize.Y * object.AnchorPoint.Y)
+- UserInputService:GetMouseLocation()
+end
+end)
+local ec = UserInputService.InputEnded:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+dragging = false
+end
+end)
+local rc = RunService.RenderStepped:Connect(function()
+if dragging then
+local pos = UserInputService:GetMouseLocation() + relative + insetOff
+object.Position = UDim2.fromOffset(pos.X, pos.Y)
+end
+end)
+object.Destroying:Connect(function() ec:Disconnect(); rc:Disconnect() end)
+end
+
+makeDraggableReal(Main, Main)
+makeDraggableReal(PillUI, PillUI)
+
+local tweenInfo   = TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+local pillUsed    = false
+local lastMainPos = Main.Position
+local isAnimating = false
+
+CloseBtn.MouseButton1Click:Connect(function() UninstallOverlay.Visible = true end)
+
+local function shrinkToPill()
+if not Main.Visible or isAnimating then return end
+isAnimating = true
+lastMainPos = Main.Position
+PillUI.Size = ud2(0,0,0,34)
+if not pillUsed then PillUI.Position = ud2(0.5,0,0,12); pillUsed = true end
+PillUI.Visible  = true
+PillScale.Scale = 0
+TweenService:Create(PillUI,    tweenInfo, {Size = ud2(0,110,0,34)}):Play()
+TweenService:Create(PillScale, tweenInfo, {Scale = 1}):Play()
+TweenService:Create(MainScale, tweenInfo, {Scale = 0}):Play()
+TweenService:Create(Main, tweenInfo, {
+Position = ud2(PillUI.Position.X.Scale, PillUI.Position.X.Offset,
+PillUI.Position.Y.Scale, PillUI.Position.Y.Offset + 17)
+}):Play()
+task.delay(0.32, function()
+if Main and Main.Parent then Main.Visible = false end
+isAnimating = false
+end)
+end
+
+local function expandFromPill()
+if not PillUI.Visible or isAnimating then return end
+isAnimating   = true
+Main.Position = lastMainPos
+Main.Visible  = true
+TweenService:Create(PillScale, tweenInfo, {Scale = 0}):Play()
+TweenService:Create(MainScale, tweenInfo, {Scale = isExpanded and 1.4 or 1}):Play()
+task.delay(0.32, function()
+if PillUI and PillUI.Parent then PillUI.Visible = false; PillScale.Scale = 1 end
+isAnimating = false
+end)
+end
+
+MinBtn.MouseButton1Click:Connect(shrinkToPill)
+
+MaxBtn.MouseButton1Click:Connect(function()
+isExpanded = not isExpanded
+TweenService:Create(MainScale, tweenInfo, {Scale = isExpanded and 1.4 or 1}):Play()
+triggerAutoSave()
+end)
+
+local pillDragStart = nil
+PillUI.InputBegan:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+pillDragStart = input.Position
+end
+end)
+PillUI.InputEnded:Connect(function(input)
+if (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) and pillDragStart then
+if (input.Position - pillDragStart).Magnitude < 6 then expandFromPill() end
+pillDragStart = nil
+end
+end)
+
+ToggleBtn.MouseButton1Click:Connect(function()
+local inSettings = not SetPage.Visible
+ToggleBtn.Text   = inSettings and "📄" or "⚙"
+MainPage.Visible = not inSettings
+SetPage.Visible  = inSettings
+if inSettings then CollapseAllBtn.Visible = false else updateCollapseAllVisibility() end
+end)
+
+SearchBtn.MouseButton1Click:Connect(function()
+local isSearching = SearchBarHolder.Position.Y.Offset == 8
+
+if not isSearching then
+if SetPage.Visible then
+ToggleBtn.Text = "⚙"
+SetPage.Visible = false
+MainPage.Visible = true
+updateCollapseAllVisibility()
+end
+
+TweenService:Create(SearchBarHolder, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = ud2(0.5,-95,0,8)}):Play()
+TweenService:Create(TitleLabel, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {TextTransparency = 1}):Play()
+SearchInput:CaptureFocus()
+else
+TweenService:Create(SearchBarHolder, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = ud2(0.5,-95,0,-34)}):Play()
+TweenService:Create(TitleLabel, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
+SearchInput.Text = ""
+end
+end)
+
+SearchInput.FocusLost:Connect(function()
+if SearchInput.Text == "" then
+TweenService:Create(SearchBarHolder, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = ud2(0.5,-95,0,-34)}):Play()
+TweenService:Create(TitleLabel, TweenInfo.new(0.2, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {TextTransparency = 0}):Play()
+end
+end)
+
+SearchInput:GetPropertyChangedSignal("Text"):Connect(function()
+local query = string.lower(SearchInput.Text)
+
+local function sectionHasVisible(sec)
+for _, child in ipairs(sec.Content:GetChildren()) do
+if child.Visible then return true end
+end
+return false
+end
+
+local sectionsToCheck = {}
+if favSectionObj then table.insert(sectionsToCheck, favSectionObj) end
+if activeSectionObj then table.insert(sectionsToCheck, activeSectionObj) end
+for _, tabList in pairs(tabSections) do
+for _, sec in ipairs(tabList) do
+table.insert(sectionsToCheck, sec)
+end
+end
+
+for _, sec in ipairs(sectionsToCheck) do
+for _, child in ipairs(sec.Content:GetChildren()) do
+local sn = child:GetAttribute("SearchName")
+if sn then
+if query == "" or string.find(string.lower(sn), query, 1, true) then
+child.Visible = true
+else
+child.Visible = false
+end
+else
+child.Visible = (query == "")
+end
+end
+if query ~= "" then
+local hasVis = sectionHasVisible(sec)
+sec.Wrapper.Visible = hasVis
+if hasVis and not sec.IsOpen() then
+sec.SetOpen(true)
+end
+else
+sec.Wrapper.Visible = true
+end
+sec.resizeToContent()
+if sec.IsOpen() then
+local ch = sec.Content.Size.Y.Offset
+sec.Wrapper.Size = ud2(1,-16,0, SECTION_H + 4 + ch)
+end
+end
+updateCollapseAllVisibility()
+end)
+
+function switchTab(tabName)
+if activeTab == tabName then return end
+activeTab = tabName
+for key, tab in pairs(tabs) do
+local active = (key == tabName)
+TweenService:Create(tab.Pill, tabTween, { Size = active and ud2(0,40,0,2) or ud2(0,0,0,2) }):Play()
+TweenService:Create(tab.Button, tabTween, { TextColor3 = active and C.textPri or C.textSec, BackgroundTransparency = active and 0.2 or 0.5 }):Play()
+end
+homeContainer.Visible = (tabName == "Home")
+k2k1Container.Visible = (tabName == "Scripts")
+k2Container.Visible   = (tabName == "Hubs")
+updateCollapseAllVisibility()
+end
+
+tabs.Home.Button.MouseButton1Click:Connect(function() switchTab("Home") end)
+tabs.Scripts.Button.MouseButton1Click:Connect(function() switchTab("Scripts") end)
+tabs.Hubs.Button.MouseButton1Click:Connect(function() switchTab("Hubs") end)
+switchTab("Home")
+
+-- Core loops (Stepped, JumpRequest, InputBegan, RenderStepped)
+local noclipTick = 0
+RunService.Stepped:Connect(function()
+local char = LocalPlayer.Character
+if char then
+if noclipEnabled then
+noclipTick = noclipTick + 1
+if noclipTick >= 5 then
+noclipTick = 0
+pcall(function()
+for _, p in ipairs(char:GetDescendants()) do
+if p:IsA("BasePart") then p.CanCollide = false end
+end
+end)
+end
+end
+
+end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+if infJumpEnabled then
+pcall(function() LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end)
+end
+end)
+
+UserInputService.InputBegan:Connect(function(inp, gpe)
+if gpe then return end
+if clickTPEnabled and inp.UserInputType == Enum.UserInputType.MouseButton1 then
+local mouseLoc = UserInputService:GetMouseLocation()
+local ray = Camera:ViewportPointToRay(mouseLoc.X, mouseLoc.Y)
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
+rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+local result = workspace:Raycast(ray.Origin, ray.Direction * 1000, rayParams)
+if result then
+pcall(function() LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(result.Position + Vector3.new(0, 5, 0)) end)
+end
+end
+end)
+
+-- Anti-AFK
+local afkConn = nil
+LocalPlayer.Idled:Connect(function()
+if antiAFKEnabled then
+VirtualUser:Button2Down(Vector2.new(0,0), Camera.CFrame)
+task.wait(1)
+VirtualUser:Button2Up(Vector2.new(0,0), Camera.CFrame)
+end
+end)
+
+-- Rainbow Sky loop
+task.spawn(function()
+while task.wait(0.04) do
+if rainbowSkyEnabled then
+pcall(function()
+local h = tick() % 10 * 36
+Lighting.Ambient = Color3.fromHSV(h/360, 0.5, 1)
+Lighting.OutdoorAmbient = Color3.fromHSV(h/360, 0.4, 0.9)
+end)
+end
+end
+end)
+
+-- ESP update loop (throttled)
+task.spawn(function()
+while task.wait(0.3) do
+UpdateESP()
+end
+end)
+
+-- Aim assist
+local isAiming = false
+UserInputService.InputBegan:Connect(function(inp, gpe)
+if not gpe and inp.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = true end
+end)
+UserInputService.InputEnded:Connect(function(inp)
+if inp.UserInputType == Enum.UserInputType.MouseButton2 then isAiming = false end
+end)
+RunService.RenderStepped:Connect(function()
+if aimAssistEnabled and isAiming then
+local mousePos = UserInputService:GetMouseLocation()
+local closest = nil; local shortestDist = math.huge
+local rayParams = RaycastParams.new(); rayParams.FilterType = Enum.RaycastFilterType.Exclude; rayParams.FilterDescendantsInstances = {LocalPlayer.Character}
+for _, p in ipairs(Players:GetPlayers()) do
+if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") and p.Character:FindFirstChild("HumanoidRootPart") then
+local head = p.Character.Head; local hum = p.Character:FindFirstChildOfClass("Humanoid")
+if hum and hum.Health > 0 then
+local screenPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+if onScreen then
+local dist = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(mousePos.X, mousePos.Y)).Magnitude
+if dist < shortestDist then
+local isVisible = true
+if wallCheckEnabled then
+local origin = Camera.CFrame.Position; local dest = head.Position
+local result = workspace:Raycast(origin, dest - origin, rayParams)
+if result and result.Instance and not result.Instance:IsDescendantOf(p.Character) then isVisible = false end
+end
+if isVisible then shortestDist = dist; closest = head end
+end
+end
+end
+end
+end
+if closest then Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, closest.Position), aimSmoothness) end
+end
+end)
+
+-- Anti-Void loop
+task.spawn(function()
+while task.wait(0.4) do
+if antiVoidEnabled then
+pcall(function()
+local r = LocalPlayer.Character.HumanoidRootPart
+if r.Position.Y < -100 then r.CFrame = CFrame.new(0, 50, 0) end
+end)
+end
+end
+end)
+
+-- Particle suppression (throttled)
+local supTimer = 0
+workspace.DescendantAdded:Connect(function(o)
+if particlesDisabled then
+task.spawn(function() task.wait(0.5)
+pcall(function()
+if o:IsA("ParticleEmitter") or o:IsA("Smoke") or o:IsA("Fire") or o:IsA("Sparkles") then o.Enabled = false end
+end)
+end)
+end
+if o:IsA("SelectionBox") then
+task.spawn(function() task.wait() pcall(function() o:Destroy() end) end)
+end
+end)
+
+-- Keybind
+local keybindConn
+keybindConn = UserInputService.InputBegan:Connect(function(input, processed)
+if not Gui or not Gui.Parent then keybindConn:Disconnect(); return end
+if UninstallOverlay.Visible then return end
+
+if isListeningForKeybind and input.UserInputType == Enum.UserInputType.Keyboard then
+if input.KeyCode ~= Enum.KeyCode.Unknown then
+table.insert(tempKeys, input.KeyCode)
+if #tempKeys == 1 then
+KeybindBtn.Text = "[ " .. tempKeys[1].Name .. " + ? ]"
+elseif #tempKeys == 2 then
+activeKeybind         = {tempKeys[1], tempKeys[2]}
+isListeningForKeybind = false
+KeybindBtn.TextColor3 = C.textPri
+KeybindBtn.Text = "[ " .. tempKeys[1].Name .. " + " .. tempKeys[2].Name .. " ]"
+updateModalText()
+triggerAutoSave()
+end
+end
+return
+end
+
+if not processed and not isListeningForKeybind and input.UserInputType == Enum.UserInputType.Keyboard then
+if #activeKeybind == 2 then
+if (input.KeyCode == activeKeybind[2] and UserInputService:IsKeyDown(activeKeybind[1]))
+or (input.KeyCode == activeKeybind[1] and UserInputService:IsKeyDown(activeKeybind[2])) then
+if Main.Visible then shrinkToPill()
+elseif PillUI.Visible then expandFromPill() end
+end
+end
+end
+end)
+
+print("[UNScripts] Loaded - All features integrated")
