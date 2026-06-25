@@ -110,9 +110,6 @@ keycodeFromName(cfgKeybind1Name),
 keycodeFromName(cfgKeybind2Name),
 }
 
-local PROFILES_FOLDER = "UNScripts/Profiles"
-local activeProfile = savedCfg.activeProfile or "Default"
-
 local function triggerAutoSave()
 saveConfig({
 transparency  = uiTransparency,
@@ -124,123 +121,8 @@ isExpanded    = isExpanded,
     sliderFavs    = cfgSliderFavs,
     lightMode     = cfgLightMode,
     saveInventory = cfgSaveInventory,
-    saveMode      = cfgSaveMode,
-    activeProfile = activeProfile,
+    saveMode      = cfgSaveMode
 })
-end
-
-local function ensureProfilesFolder()
-if isfolder and not cfgSafely(isfolder, PROFILES_FOLDER) then
-cfgSafely(makefolder, PROFILES_FOLDER)
-end
-end
-
-local function getProfilePath(name)
-return PROFILES_FOLDER .. "/" .. name .. ".json"
-end
-
-local function saveProfile(name, data)
-ensureProfilesFolder()
-local ok, encoded = pcall(function() return HttpService:JSONEncode(data) end)
-if ok then
-cfgSafely(writefile, getProfilePath(name), encoded)
-end
-end
-
-local function loadProfileData(name)
-local path = getProfilePath(name)
-if not cfgSafely(isfile, path) then return nil end
-local content = cfgSafely(readfile, path)
-if not content then return nil end
-local ok, data = pcall(function() return HttpService:JSONDecode(content) end)
-return ok and data or nil
-end
-
-local function deleteProfile(name)
-local path = getProfilePath(name)
-if cfgSafely(isfile, path) then
-cfgSafely(delfile, path)
-end
-end
-
-local function listProfiles()
-ensureProfilesFolder()
-local list = {}
-local ok, files = pcall(function() return listfiles(PROFILES_FOLDER) end)
-if ok and files then
-for _, f in ipairs(files) do
-local name = f:match("([^/\\]+)%.json$")
-if name then table.insert(list, name) end
-end
-end
-table.sort(list)
-return list
-end
-
-local function getCurrentProfileData()
-return {
-partState = partState,
-sliderValues = {},
-transparency = uiTransparency,
-keybind1 = activeKeybind[1].Name,
-keybind2 = activeKeybind[2].Name,
-lightMode = cfgLightMode,
-saveInventory = cfgSaveInventory,
-saveMode = cfgSaveMode,
-favorites = cfgFavorites,
-sliderFavs = cfgSliderFavs,
-flySpeed = flySpeed,
-aimSmoothness = aimSmoothness,
-}
-end
-
-local function applyProfileData(data)
-if not data then return end
-partState = data.partState or {}
-cfgFavorites = data.favorites or {}
-cfgSliderFavs = data.sliderFavs or {}
-uiTransparency = data.transparency or 0.25
-cfgLightMode = data.lightMode or false
-cfgSaveInventory = data.saveInventory or false
-cfgSaveMode = data.saveMode or "All"
-flySpeed = data.flySpeed or 60
-aimSmoothness = data.aimSmoothness or 0.15
-if data.keybind1 then activeKeybind[1] = keycodeFromName(data.keybind1) end
-if data.keybind2 then activeKeybind[2] = keycodeFromName(data.keybind2) end
-applyTransparency(uiTransparency)
-applyTheme()
-for uid, state in pairs(partState) do
-if state then
-if originalToggles[uid] and originalToggles[uid].toggle then
-originalToggles[uid].toggle.SetOn(true, true)
-end
-if proxyToggles[uid] and proxyToggles[uid].toggle then
-proxyToggles[uid].toggle.SetOn(true, true)
-end
-end
-end
-triggerAutoSave()
-if rebuildFavorites then rebuildFavorites() end
-if rebuildActive then rebuildActive() end
-end
-
-local function saveCurrentProfile(name)
-saveProfile(name or activeProfile, getCurrentProfileData())
-end
-
-local function loadAndApplyProfile(name)
-local data = loadProfileData(name)
-if data then
-activeProfile = name
-applyProfileData(data)
-end
-end
-
-local function deleteProfileAndRefresh(name)
-deleteProfile(name)
-if activeProfile == name then
-activeProfile = "Default"
-end
 end
 
 local themeRegistry = {}
@@ -477,35 +359,8 @@ end
 end
 end
 
-local function reapplySliderValues()
-for uid, params in pairs(sliderParams) do
-if params.callback then
-local saved = cfgSliderFavs[uid]
-if saved then
-params.callback(saved)
-end
-end
-end
-if fullBrightEnabled then
-pcall(function()
-Lighting.Brightness = 10
-Lighting.Ambient = Color3.new(1,1,1)
-Lighting.OutdoorAmbient = Color3.new(1,1,1)
-end)
-end
-if shadowsDisabled then
-pcall(function() Lighting.GlobalShadows = false end)
-end
-if fogRemoved then
-pcall(function() Lighting.FogEnd = 100000; Lighting.FogStart = 100000 end)
-end
-if postFXDisabled then
-for _, o in ipairs(Lighting:GetChildren()) do pcall(function() if o:IsA("PostEffect") then o.Enabled = false end end) end
-end
-pcall(function() Camera.FieldOfView = cfgSliderFavs["Scripts_Visual_slider_Camera FOV"] or 70 end)
-end
-
 LocalPlayer.CharacterAdded:Connect(function(char)
+if not cfgSaveInventory then return end
 task.wait(1.5)
 local hum = char:WaitForChild("Humanoid", 3)
 if hum then
@@ -520,41 +375,7 @@ tClone:Clone().Parent = bp
 end
 end
 end
-reapplySliderValues()
 applyTogglesToCharacter()
-if flyEnabled then
-task.spawn(function()
-task.wait(0.3)
-local root = char:WaitForChild("HumanoidRootPart", 3)
-if root and flyEnabled then
-local bv = Instance.new("BodyVelocity")
-bv.Name = "UNS_FlyBV"; bv.Velocity = Vector3.new(0,0,0); bv.MaxForce = Vector3.new(1e5,1e5,1e5); bv.Parent = root
-local bg = Instance.new("BodyGyro")
-bg.Name = "UNS_FlyBG"; bg.MaxTorque = Vector3.new(1e5,1e5,1e5); bg.D = 50; bg.P = 1e4; bg.Parent = root
-while flyEnabled do
-if not root.Parent then break end
-local speed = flySpeed * (UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and 2 or 1)
-local camCF = Camera.CFrame
-local fwd = Vector3.new(camCF.LookVector.X, 0, camCF.LookVector.Z)
-local rgt = Vector3.new(camCF.RightVector.X, 0, camCF.RightVector.Z)
-if fwd.Magnitude > 0.001 then fwd = fwd.Unit end
-if rgt.Magnitude > 0.001 then rgt = rgt.Unit end
-local vel = Vector3.new(0,0,0)
-if UserInputService:IsKeyDown(Enum.KeyCode.W) then vel = vel + fwd end
-if UserInputService:IsKeyDown(Enum.KeyCode.S) then vel = vel - fwd end
-if UserInputService:IsKeyDown(Enum.KeyCode.A) then vel = vel - rgt end
-if UserInputService:IsKeyDown(Enum.KeyCode.D) then vel = vel + rgt end
-if UserInputService:IsKeyDown(Enum.KeyCode.Space) then vel = vel + Vector3.new(0,1,0) end
-if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then vel = vel - Vector3.new(0,1,0) end
-bv.Velocity = vel.Magnitude > 0.001 and vel.Unit * speed or Vector3.new(0,0,0)
-local yaw = math.atan2(-camCF.LookVector.X, -camCF.LookVector.Z)
-bg.CFrame = CFrame.new(root.Position) * CFrame.Angles(0, yaw, 0)
-task.wait()
-end
-if bv then bv:Destroy() end
-if bg then bg:Destroy() end
-end)
-end
 end)
 
 local UninstallOverlay = Make("Frame", {
@@ -773,13 +594,11 @@ TextXAlignment = Enum.TextXAlignment.Left, Parent = pill,
 
 local valInput = Make("TextBox", {
 Size = ud2(0,42,0,20), Position = ud2(1,-56,0,6),
-BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.3,
-Text = tostring(val), TextColor3 = C.textPri, TextSize = 10, Font = bold,
-TextXAlignment = Enum.TextXAlignment.Center,
-ClearTextOnFocus = false, Parent = pill,
+BackgroundTransparency = 1, Text = tostring(val),
+TextColor3 = C.textSec, TextSize = 10, Font = bold,
+TextXAlignment = Enum.TextXAlignment.Right, Parent = pill,
+ClearTextOnFocus = false,
 })
-Make("UICorner", {CornerRadius = ud(0,4), Parent = valInput})
-Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = valInput})
 
 local track = Make("Frame", {
 Size = ud2(1,-28,0,6), Position = ud2(0,14,0,32),
@@ -804,34 +623,23 @@ Make("UIStroke", {Color = rgb(80,80,80), Thickness = 1, Transparency = 0.3, Pare
 
 local dragging = false
 
-local function updateFromValue(newVal)
-val = math.clamp(math.floor(newVal + 0.5), minV, maxV)
-local newFrac = (val - minV) / (maxV - minV)
-fill.Size = ud2(newFrac, 0, 1, 0)
-knob.Position = ud2(newFrac, -7, 0, -4)
-valInput.Text = tostring(val)
-if callback then callback(val) end
+local function setVal(v)
+v = math.clamp(v, minV, maxV)
+val = v
+valInput.Text = tostring(v)
+local p = (v - minV) / (maxV - minV)
+TweenService:Create(fill, TweenInfo.new(0.1), {Size = ud2(p, 0, 1, 0)}):Play()
+knob.Position = ud2(p, -7, 0, -4)
 if uid and cfgFavorites[uid] then
 cfgSliderFavs[uid] = val
 end
-end
-
-local function update(posX)
-local rel = math.clamp((posX - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-val = math.floor(minV + (maxV - minV) * rel + 0.5)
-fill.Size = ud2(rel, 0, 1, 0)
-knob.Position = ud2(rel, -7, 0, -4)
-valInput.Text = tostring(val)
 if callback then callback(val) end
-if uid and cfgFavorites[uid] then
-cfgSliderFavs[uid] = val
-end
 end
 
 valInput.FocusLost:Connect(function()
 local num = tonumber(valInput.Text)
 if num then
-updateFromValue(num)
+setVal(num)
 else
 valInput.Text = tostring(val)
 end
@@ -849,7 +657,9 @@ BackgroundTransparency = 1, Text = "", ZIndex = knob.ZIndex - 1, Parent = track,
 })
 hitbox.InputBegan:Connect(function(input)
 if input.UserInputType == Enum.UserInputType.MouseButton1 then
-dragging = true; update(input.Position.X)
+dragging = true
+local rel = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+setVal(math.floor(minV + (maxV - minV) * rel + 0.5))
 end
 end)
 
@@ -861,7 +671,8 @@ end
 end)
 local rc = UserInputService.InputChanged:Connect(function(input)
 if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-update(input.Position.X)
+local rel = math.clamp((input.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+setVal(math.floor(minV + (maxV - minV) * rel + 0.5))
 end
 end)
 pill.Destroying:Connect(function() ec:Disconnect(); rc:Disconnect() end)
@@ -905,7 +716,7 @@ end
 triggerAutoSave()
 if rebuildFavorites then rebuildFavorites() end
 end)
-sliderFavObj[uid] = { name = label, star = star, pill = pill, getVal = function() return val end, updateValue = updateFromValue }
+sliderFavObj[uid] = { name = label, star = star, pill = pill, getVal = function() return val end }
 end
 end
 
@@ -2209,7 +2020,6 @@ local sTab = {}
 sTab.Shortcuts     = makeSettingsTab("Shortcuts")
 sTab.Themes        = makeSettingsTab("Themes")
 sTab.Scripts       = makeSettingsTab("Scripts", 80)
-sTab.Profiles      = makeSettingsTab("Profiles", 75)
 
 local function makeSetScroll(visible)
 local s = Make("ScrollingFrame", {
@@ -2226,7 +2036,6 @@ end
 local ScrollShortcuts     = makeSetScroll(true)
 local ScrollThemes        = makeSetScroll(false)
 local ScrollScripts       = makeSetScroll(false)
-local ScrollProfiles      = makeSetScroll(false)
 
 local activeSettingsTab = "Shortcuts"
 
@@ -2236,7 +2045,6 @@ activeSettingsTab = name
 ScrollShortcuts.Visible     = (name == "Shortcuts")
 ScrollThemes.Visible        = (name == "Themes")
 ScrollScripts.Visible       = (name == "Scripts")
-ScrollProfiles.Visible      = (name == "Profiles")
 for key, tab in pairs(sTab) do
 local active = (key == name)
 TweenService:Create(tab.Pill, tabTween, { Size = active and ud2(0,40,0,2) or ud2(0,0,0,2) }):Play()
@@ -2247,7 +2055,6 @@ end
 sTab.Shortcuts.Button.MouseButton1Click:Connect(function()     switchSettingsTab("Shortcuts") end)
 sTab.Themes.Button.MouseButton1Click:Connect(function()        switchSettingsTab("Themes") end)
 sTab.Scripts.Button.MouseButton1Click:Connect(function()       switchSettingsTab("Scripts") end)
-sTab.Profiles.Button.MouseButton1Click:Connect(function()      switchSettingsTab("Profiles") end)
 
 local function makeSetSection(parent, title, contentH, startOpen)
 local wrapper = Make("Frame", {
@@ -2398,136 +2205,6 @@ trackCurrentState()
 ManualSaveBtn.Text = "Saved Successfully!"
 task.delay(1, function() ManualSaveBtn.Text = "Force Manual Save" end)
 end)
-
--- ============================================================
---  Profile Manager UI
--- ============================================================
-local profileLabel = Make("TextLabel", {
-Size = ud2(1,-8,0,22), BackgroundTransparency = 1,
-Text = "PROFILES", TextColor3 = C.textSec,
-TextSize = 10, Font = bold, LayoutOrder = 0, Parent = ScrollProfiles,
-})
-
-local profileInputRow = Make("Frame", {
-Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg,
-BackgroundTransparency = 0.3, BorderSizePixel = 0,
-LayoutOrder = 1, Parent = ScrollProfiles,
-})
-Make("UICorner", {CornerRadius = ud(1,0), Parent = profileInputRow})
-Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = profileInputRow})
-
-local profileNameBox = Make("TextBox", {
-Size = ud2(1,-100,0,22), Position = ud2(0,14,0,5),
-BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.3,
-PlaceholderText = "Profile name...", PlaceholderColor3 = C.textSec,
-Text = "", TextColor3 = C.textPri, TextSize = 11, Font = reg,
-ClearTextOnFocus = false, Parent = profileInputRow,
-})
-Make("UICorner", {CornerRadius = ud(0,4), Parent = profileNameBox})
-Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = profileNameBox})
-
-local saveProfileBtn = Make("TextButton", {
-Size = ud2(0,70,0,22), Position = ud2(1,-80,0,5),
-BackgroundColor3 = C.accent, BackgroundTransparency = 0.1,
-Text = "Save", TextColor3 = C.white,
-TextSize = 10, Font = bold, Parent = profileInputRow,
-})
-Make("UICorner", {CornerRadius = ud(0,4), Parent = saveProfileBtn})
-
-local profileActiveLabel = Make("TextLabel", {
-Size = ud2(1,-8,0,20), BackgroundTransparency = 1,
-Text = "Current: " .. activeProfile,
-TextColor3 = C.dot_grn, TextSize = 10, Font = bold,
-LayoutOrder = 2, Parent = ScrollProfiles,
-})
-
-local function refreshProfileList()
-for _, child in ipairs(ScrollProfiles:GetChildren()) do
-if child:IsA("Frame") and child:GetAttribute("IsProfileRow") then
-child:Destroy()
-end
-end
-local profs = listProfiles()
-local order = 3
-for _, name in ipairs(profs) do
-local row = Make("Frame", {
-Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg,
-BackgroundTransparency = 0.3, BorderSizePixel = 0,
-LayoutOrder = order, Parent = ScrollProfiles,
-})
-row:SetAttribute("IsProfileRow", true)
-row:SetAttribute("SearchName", name)
-Make("UICorner", {CornerRadius = ud(1,0), Parent = row})
-
-local isActive = (name == activeProfile)
-if isActive then
-Make("Frame", {
-Size = ud2(0,3,1,0), BackgroundColor3 = C.dot_grn,
-BorderSizePixel = 0, Parent = row,
-})
-end
-
-Make("TextLabel", {
-Size = ud2(1,-120,1,0), Position = ud2(0,14,0,0),
-BackgroundTransparency = 1, Text = name,
-TextColor3 = isActive and C.dot_grn or C.textPri,
-TextSize = 11, Font = isActive and bold or reg,
-TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
-})
-
-local loadBtn = Make("TextButton", {
-Size = ud2(0,42,0,20), Position = ud2(1,-56,0,6),
-BackgroundColor3 = C.accent, BackgroundTransparency = 0.1,
-Text = "Load", TextColor3 = C.white,
-TextSize = 10, Font = bold, Parent = row,
-})
-Make("UICorner", {CornerRadius = ud(0,4), Parent = loadBtn})
-loadBtn.MouseButton1Click:Connect(function()
-activeProfile = name
-local data = loadProfileData(name)
-if data then applyProfileData(data) end
-profileActiveLabel.Text = "Current: " .. activeProfile
-refreshProfileList()
-triggerAutoSave()
-end)
-
-local delBtn = Make("TextButton", {
-Size = ud2(0,42,0,20), Position = ud2(1,-100,0,6),
-BackgroundColor3 = C.dot_red, BackgroundTransparency = 0.15,
-Text = "Del", TextColor3 = C.white,
-TextSize = 10, Font = bold, Parent = row,
-})
-Make("UICorner", {CornerRadius = ud(0,4), Parent = delBtn})
-delBtn.MouseButton1Click:Connect(function()
-deleteProfileAndRefresh(name)
-profileActiveLabel.Text = "Current: " .. activeProfile
-refreshProfileList()
-end)
-
-order = order + 1
-end
-if #profs == 0 then
-local empty = Make("TextLabel", {
-Size = ud2(1,-8,0,28), BackgroundTransparency = 1,
-Text = "No profiles saved", TextColor3 = C.textSec,
-TextSize = 11, Font = reg, LayoutOrder = 3, Parent = ScrollProfiles,
-})
-empty:SetAttribute("IsProfileRow", true)
-end
-end
-
-saveProfileBtn.MouseButton1Click:Connect(function()
-local name = profileNameBox.Text:gsub("%s+", "")
-if name == "" then name = "Default" end
-saveCurrentProfile(name)
-activeProfile = name
-triggerAutoSave()
-profileNameBox.Text = ""
-profileActiveLabel.Text = "Current: " .. activeProfile
-refreshProfileList()
-end)
-
-refreshProfileList()
 
 transparencyFrames = {
 {frame = Main,          base = 0,    radius = UDim.new(0, 16)},
