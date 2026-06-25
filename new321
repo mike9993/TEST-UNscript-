@@ -95,8 +95,8 @@ local cfgLightMode       = savedCfg.lightMode or false
 local cfgSaveInventory   = savedCfg.saveInventory or false
 local cfgSaveMode        = savedCfg.saveMode or "All"
 local cfgSliderFavs      = savedCfg.sliderFavs or {}
-local cfgSpeedUpKeyName    = savedCfg.speedUpKey or "Equals"
-local cfgSpeedDownKeyName  = savedCfg.speedDownKey or "Minus"
+local cfgSpeedDecKey     = savedCfg.speedDecKey or "Minus"
+local cfgSpeedIncKey     = savedCfg.speedIncKey or "Equal"
 
 local uiTransparency      = cfgTransparency
 local startupNotifEnabled = cfgNotifEnabled
@@ -112,9 +112,6 @@ keycodeFromName(cfgKeybind1Name),
 keycodeFromName(cfgKeybind2Name),
 }
 
-local activeSpeedUpKey   = keycodeFromName(cfgSpeedUpKeyName)
-local activeSpeedDownKey = keycodeFromName(cfgSpeedDownKeyName)
-
 local function triggerAutoSave()
 saveConfig({
 transparency  = uiTransparency,
@@ -127,8 +124,8 @@ isExpanded    = isExpanded,
     lightMode     = cfgLightMode,
     saveInventory = cfgSaveInventory,
     saveMode      = cfgSaveMode,
-    speedUpKey    = activeSpeedUpKey.Name,
-    speedDownKey  = activeSpeedDownKey.Name
+    speedDecKey   = speedDecKey.Name,
+    speedIncKey   = speedIncKey.Name
 })
 end
 
@@ -317,24 +314,6 @@ local partState      = {}
 
 local originalToggles = {}
 local proxyToggles    = {}
-
-local speedUpHolding   = false
-local speedDownHolding = false
-local isListeningForSpeedUp   = false
-local isListeningForSpeedDown = false
-
-local function adjustWalkSpeed(delta)
-local current = 16
-pcall(function()
-current = LocalPlayer.Character.Humanoid.WalkSpeed
-end)
-local newSpeed = math.clamp(current + delta, 16, 500)
-pcall(function()
-LocalPlayer.Character.Humanoid.WalkSpeed = newSpeed
-end)
-cfgSliderFavs["Scripts_Movement_slider_WalkSpeed"] = newSpeed
-triggerAutoSave()
-end
 
 local function trackCurrentState()
 if not cfgSaveInventory then return end
@@ -854,6 +833,17 @@ local espEnemyOnly = false
 local espNames = false
 local espDistance = false
 local espChams = false
+
+local speedDecKey = keycodeFromName(cfgSpeedDecKey)
+local speedIncKey = keycodeFromName(cfgSpeedIncKey)
+local speedDecHeld = false
+local speedIncHeld = false
+local speedDecFirstPress = 0
+local speedIncFirstPress = 0
+local speedDecLastIncrement = 0
+local speedIncLastIncrement = 0
+local speedDecListening = false
+local speedIncListening = false
 
 -- ESP
 local function createTogglePart(parent, pName, uid, layoutOrder, isProxy)
@@ -2122,7 +2112,7 @@ BackgroundTransparency = 1, ClipsDescendants = true, Parent = wrapper,
 return wrapper, content
 end
 
-local _, ShortcutSecContent = makeSetSection(ScrollShortcuts, "Close and open UI", PART_H+5, true)
+local _, ShortcutSecContent = makeSetSection(ScrollShortcuts, "Shortcuts", (PART_H*3)+10, true)
 local ShortcutItemPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = ShortcutSecContent })
 Make("UICorner", {CornerRadius = ud(1,0), Parent = ShortcutItemPill})
 Make("TextLabel", { Size = ud2(0,120,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Toggle UI Keybind", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = ShortcutItemPill })
@@ -2138,33 +2128,31 @@ KeybindBtn.TextColor3 = C.dot_yel
 end
 end)
 
-local _, SpeedSecContent = makeSetSection(ScrollShortcuts, "WalkSpeed Shortcut", PART_H * 2 + 5, true)
-
-local SpeedUpPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = SpeedSecContent })
-Make("UICorner", {CornerRadius = ud(1,0), Parent = SpeedUpPill})
-Make("TextLabel", { Size = ud2(0,120,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Speed +1 Key", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SpeedUpPill })
-local SpeedUpKeyBtn = Make("TextButton", { Size = ud2(0,110,0,22), Position = ud2(1,-145,0,5), BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1, Text = "[ " .. activeSpeedUpKey.Name .. " ]", TextColor3 = C.textPri, TextSize = 11, Font = bold, Parent = SpeedUpPill })
-Make("UICorner", {CornerRadius = ud(0,4), Parent = SpeedUpKeyBtn})
-Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = SpeedUpKeyBtn})
-SpeedUpKeyBtn.MouseButton1Click:Connect(function()
-if not isListeningForSpeedUp and not isListeningForKeybind then
-isListeningForSpeedUp = true
-SpeedUpKeyBtn.Text = "[ Press Key ]"
-SpeedUpKeyBtn.TextColor3 = C.dot_yel
+local SpeedDecItemPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), Position = ud2(0,0,0,PART_H+5), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = ShortcutSecContent })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = SpeedDecItemPill})
+Make("TextLabel", { Size = ud2(0,140,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Speed Decrease (-)", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SpeedDecItemPill })
+local SpeedDecBtn = Make("TextButton", { Size = ud2(0,110,0,22), Position = ud2(1,-145,0,5), BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1, Text = "[ " .. speedDecKey.Name .. " ]", TextColor3 = C.textPri, TextSize = 11, Font = bold, Parent = SpeedDecItemPill })
+Make("UICorner", {CornerRadius = ud(0,4), Parent = SpeedDecBtn})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = SpeedDecBtn})
+SpeedDecBtn.MouseButton1Click:Connect(function()
+if not speedDecListening then
+speedDecListening = true
+SpeedDecBtn.Text = "[ Press Key ]"
+SpeedDecBtn.TextColor3 = C.dot_yel
 end
 end)
 
-local SpeedDownPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), Position = ud2(0,0,0,PART_H + 2), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = SpeedSecContent })
-Make("UICorner", {CornerRadius = ud(1,0), Parent = SpeedDownPill})
-Make("TextLabel", { Size = ud2(0,120,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Speed -1 Key", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SpeedDownPill })
-local SpeedDownKeyBtn = Make("TextButton", { Size = ud2(0,110,0,22), Position = ud2(1,-145,0,5), BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1, Text = "[ " .. activeSpeedDownKey.Name .. " ]", TextColor3 = C.textPri, TextSize = 11, Font = bold, Parent = SpeedDownPill })
-Make("UICorner", {CornerRadius = ud(0,4), Parent = SpeedDownKeyBtn})
-Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = SpeedDownKeyBtn})
-SpeedDownKeyBtn.MouseButton1Click:Connect(function()
-if not isListeningForSpeedDown and not isListeningForKeybind then
-isListeningForSpeedDown = true
-SpeedDownKeyBtn.Text = "[ Press Key ]"
-SpeedDownKeyBtn.TextColor3 = C.dot_yel
+local SpeedIncItemPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), Position = ud2(0,0,0,(PART_H*2)+10), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = ShortcutSecContent })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = SpeedIncItemPill})
+Make("TextLabel", { Size = ud2(0,140,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Speed Increase (+)", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SpeedIncItemPill })
+local SpeedIncBtn = Make("TextButton", { Size = ud2(0,110,0,22), Position = ud2(1,-145,0,5), BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1, Text = "[ " .. speedIncKey.Name .. " ]", TextColor3 = C.textPri, TextSize = 11, Font = bold, Parent = SpeedIncItemPill })
+Make("UICorner", {CornerRadius = ud(0,4), Parent = SpeedIncBtn})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = SpeedIncBtn})
+SpeedIncBtn.MouseButton1Click:Connect(function()
+if not speedIncListening then
+speedIncListening = true
+SpeedIncBtn.Text = "[ Press Key ]"
+SpeedIncBtn.TextColor3 = C.dot_yel
 end
 end)
 
@@ -2606,77 +2594,11 @@ task.spawn(function() task.wait() pcall(function() o:Destroy() end) end)
 end
 end)
 
--- Speed Key Shortcuts
-local speedConn
-speedConn = UserInputService.InputBegan:Connect(function(input, processed)
-if not Gui or not Gui.Parent then speedConn:Disconnect(); return end
-if UninstallOverlay.Visible then return end
-if isListeningForKeybind then return end
-
-if isListeningForSpeedUp and input.UserInputType == Enum.UserInputType.Keyboard then
-if input.KeyCode ~= Enum.KeyCode.Unknown then
-activeSpeedUpKey = input.KeyCode
-isListeningForSpeedUp = false
-SpeedUpKeyBtn.Text = "[ " .. input.KeyCode.Name .. " ]"
-SpeedUpKeyBtn.TextColor3 = C.textPri
-triggerAutoSave()
-end
-return
-end
-
-if isListeningForSpeedDown and input.UserInputType == Enum.UserInputType.Keyboard then
-if input.KeyCode ~= Enum.KeyCode.Unknown then
-activeSpeedDownKey = input.KeyCode
-isListeningForSpeedDown = false
-SpeedDownKeyBtn.Text = "[ " .. input.KeyCode.Name .. " ]"
-SpeedDownKeyBtn.TextColor3 = C.textPri
-triggerAutoSave()
-end
-return
-end
-
-if not processed and input.UserInputType == Enum.UserInputType.Keyboard then
-if input.KeyCode == activeSpeedUpKey and not UserInputService:IsKeyDown(activeSpeedDownKey) then
-speedUpHolding = true
-adjustWalkSpeed(1)
-task.spawn(function()
-task.wait(0.4)
-while speedUpHolding do
-adjustWalkSpeed(1)
-task.wait(0.08)
-end
-end)
-elseif input.KeyCode == activeSpeedDownKey and not UserInputService:IsKeyDown(activeSpeedUpKey) then
-speedDownHolding = true
-adjustWalkSpeed(-1)
-task.spawn(function()
-task.wait(0.4)
-while speedDownHolding do
-adjustWalkSpeed(-1)
-task.wait(0.08)
-end
-end)
-end
-end
-end)
-
-local speedEndConn
-speedEndConn = UserInputService.InputEnded:Connect(function(input)
-if input.UserInputType == Enum.UserInputType.Keyboard then
-if input.KeyCode == activeSpeedUpKey then
-speedUpHolding = false
-elseif input.KeyCode == activeSpeedDownKey then
-speedDownHolding = false
-end
-end
-end)
-
 -- Keybind
 local keybindConn
 keybindConn = UserInputService.InputBegan:Connect(function(input, processed)
 if not Gui or not Gui.Parent then keybindConn:Disconnect(); return end
 if UninstallOverlay.Visible then return end
-if isListeningForSpeedUp or isListeningForSpeedDown then return end
 
 if isListeningForKeybind and input.UserInputType == Enum.UserInputType.Keyboard then
 if input.KeyCode ~= Enum.KeyCode.Unknown then
@@ -2695,12 +2617,104 @@ end
 return
 end
 
-if not processed and not isListeningForKeybind and input.UserInputType == Enum.UserInputType.Keyboard then
+if speedDecListening and input.UserInputType == Enum.UserInputType.Keyboard then
+if input.KeyCode ~= Enum.KeyCode.Unknown then
+speedDecKey = input.KeyCode
+speedDecListening = false
+SpeedDecBtn.Text = "[ " .. speedDecKey.Name .. " ]"
+SpeedDecBtn.TextColor3 = C.textPri
+triggerAutoSave()
+end
+return
+end
+
+if speedIncListening and input.UserInputType == Enum.UserInputType.Keyboard then
+if input.KeyCode ~= Enum.KeyCode.Unknown then
+speedIncKey = input.KeyCode
+speedIncListening = false
+SpeedIncBtn.Text = "[ " .. speedIncKey.Name .. " ]"
+SpeedIncBtn.TextColor3 = C.textPri
+triggerAutoSave()
+end
+return
+end
+
+if not processed and input.UserInputType == Enum.UserInputType.Keyboard then
+if input.KeyCode == speedDecKey then
+speedDecHeld = true
+speedDecFirstPress = tick()
+speedDecLastIncrement = tick()
+pcall(function()
+local char = LocalPlayer.Character
+if char and char:FindFirstChild("Humanoid") then
+char.Humanoid.WalkSpeed = math.max(16, char.Humanoid.WalkSpeed - 1)
+end
+end)
+end
+
+if input.KeyCode == speedIncKey then
+speedIncHeld = true
+speedIncFirstPress = tick()
+speedIncLastIncrement = tick()
+pcall(function()
+local char = LocalPlayer.Character
+if char and char:FindFirstChild("Humanoid") then
+char.Humanoid.WalkSpeed = math.min(500, char.Humanoid.WalkSpeed + 1)
+end
+end)
+end
+
+if not isListeningForKeybind and input.UserInputType == Enum.UserInputType.Keyboard then
 if #activeKeybind == 2 then
 if (input.KeyCode == activeKeybind[2] and UserInputService:IsKeyDown(activeKeybind[1]))
 or (input.KeyCode == activeKeybind[1] and UserInputService:IsKeyDown(activeKeybind[2])) then
 if Main.Visible then shrinkToPill()
 elseif PillUI.Visible then expandFromPill() end
+end
+end
+end
+end
+end)
+
+local speedKeybindConn
+speedKeybindConn = UserInputService.InputEnded:Connect(function(input)
+if not Gui or not Gui.Parent then speedKeybindConn:Disconnect(); return end
+if input.UserInputType == Enum.UserInputType.Keyboard then
+if input.KeyCode == speedDecKey then
+speedDecHeld = false
+end
+if input.KeyCode == speedIncKey then
+speedIncHeld = false
+end
+end
+end)
+
+task.spawn(function()
+while true do
+task.wait(0.08)
+local now = tick()
+if speedDecHeld then
+local held = now - speedDecFirstPress
+if held > 0.4 and (now - speedDecLastIncrement) >= 0.08 then
+speedDecLastIncrement = now
+pcall(function()
+local char = LocalPlayer.Character
+if char and char:FindFirstChild("Humanoid") then
+char.Humanoid.WalkSpeed = math.max(16, char.Humanoid.WalkSpeed - 1)
+end
+end)
+end
+end
+if speedIncHeld then
+local held = now - speedIncFirstPress
+if held > 0.4 and (now - speedIncLastIncrement) >= 0.08 then
+speedIncLastIncrement = now
+pcall(function()
+local char = LocalPlayer.Character
+if char and char:FindFirstChild("Humanoid") then
+char.Humanoid.WalkSpeed = math.min(500, char.Humanoid.WalkSpeed + 1)
+end
+end)
 end
 end
 end
