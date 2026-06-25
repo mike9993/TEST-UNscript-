@@ -95,8 +95,6 @@ local cfgLightMode       = savedCfg.lightMode or false
 local cfgSaveInventory   = savedCfg.saveInventory or false
 local cfgSaveMode        = savedCfg.saveMode or "All"
 local cfgSliderFavs      = savedCfg.sliderFavs or {}
-local cfgSpeedDecKeyName = savedCfg.speedDecKey or "Minus"
-local cfgSpeedIncKeyName = savedCfg.speedIncKey or "Equal"
 
 local uiTransparency      = cfgTransparency
 local startupNotifEnabled = cfgNotifEnabled
@@ -112,9 +110,6 @@ keycodeFromName(cfgKeybind1Name),
 keycodeFromName(cfgKeybind2Name),
 }
 
-local speedDecKey = keycodeFromName(cfgSpeedDecKeyName)
-local speedIncKey = keycodeFromName(cfgSpeedIncKeyName)
-
 local function triggerAutoSave()
 saveConfig({
 transparency  = uiTransparency,
@@ -126,9 +121,7 @@ isExpanded    = isExpanded,
     sliderFavs    = cfgSliderFavs,
     lightMode     = cfgLightMode,
     saveInventory = cfgSaveInventory,
-    saveMode      = cfgSaveMode,
-    speedDecKey   = speedDecKey.Name,
-    speedIncKey   = speedIncKey.Name
+    saveMode      = cfgSaveMode
 })
 end
 
@@ -836,15 +829,6 @@ local espEnemyOnly = false
 local espNames = false
 local espDistance = false
 local espChams = false
-
-local speedDecHeld = false
-local speedIncHeld = false
-local speedDecFirstPress = 0
-local speedIncFirstPress = 0
-local speedDecLastIncrement = 0
-local speedIncLastIncrement = 0
-local speedDecListening = false
-local speedIncListening = false
 
 -- ESP
 local function createTogglePart(parent, pName, uid, layoutOrder, isProxy)
@@ -2113,7 +2097,7 @@ BackgroundTransparency = 1, ClipsDescendants = true, Parent = wrapper,
 return wrapper, content
 end
 
-local _, ShortcutSecContent = makeSetSection(ScrollShortcuts, "Shortcuts", (PART_H*3)+10, true)
+local _, ShortcutSecContent = makeSetSection(ScrollShortcuts, "Close and open UI", PART_H+5, true)
 local ShortcutItemPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = ShortcutSecContent })
 Make("UICorner", {CornerRadius = ud(1,0), Parent = ShortcutItemPill})
 Make("TextLabel", { Size = ud2(0,120,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Toggle UI Keybind", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = ShortcutItemPill })
@@ -2126,34 +2110,6 @@ isListeningForKeybind = true
 tempKeys = {}
 KeybindBtn.Text = "[ Press 1st Key ]"
 KeybindBtn.TextColor3 = C.dot_yel
-end
-end)
-
-local SpeedDecItemPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), Position = ud2(0,0,0,PART_H+5), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = ShortcutSecContent })
-Make("UICorner", {CornerRadius = ud(1,0), Parent = SpeedDecItemPill})
-Make("TextLabel", { Size = ud2(0,140,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Speed Decrease (-)", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SpeedDecItemPill })
-local SpeedDecBtn = Make("TextButton", { Size = ud2(0,110,0,22), Position = ud2(1,-145,0,5), BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1, Text = "[ " .. speedDecKey.Name .. " ]", TextColor3 = C.textPri, TextSize = 11, Font = bold, Parent = SpeedDecItemPill })
-Make("UICorner", {CornerRadius = ud(0,4), Parent = SpeedDecBtn})
-Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = SpeedDecBtn})
-SpeedDecBtn.MouseButton1Click:Connect(function()
-if not speedDecListening then
-speedDecListening = true
-SpeedDecBtn.Text = "[ Press Key ]"
-SpeedDecBtn.TextColor3 = C.dot_yel
-end
-end)
-
-local SpeedIncItemPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), Position = ud2(0,0,0,(PART_H*2)+10), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = ShortcutSecContent })
-Make("UICorner", {CornerRadius = ud(1,0), Parent = SpeedIncItemPill})
-Make("TextLabel", { Size = ud2(0,140,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Speed Increase (+)", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SpeedIncItemPill })
-local SpeedIncBtn = Make("TextButton", { Size = ud2(0,110,0,22), Position = ud2(1,-145,0,5), BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1, Text = "[ " .. speedIncKey.Name .. " ]", TextColor3 = C.textPri, TextSize = 11, Font = bold, Parent = SpeedIncItemPill })
-Make("UICorner", {CornerRadius = ud(0,4), Parent = SpeedIncBtn})
-Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = SpeedIncBtn})
-SpeedIncBtn.MouseButton1Click:Connect(function()
-if not speedIncListening then
-speedIncListening = true
-SpeedIncBtn.Text = "[ Press Key ]"
-SpeedIncBtn.TextColor3 = C.dot_yel
 end
 end)
 
@@ -2618,54 +2574,7 @@ end
 return
 end
 
-if speedDecListening and input.UserInputType == Enum.UserInputType.Keyboard then
-if input.KeyCode ~= Enum.KeyCode.Unknown then
-speedDecKey = input.KeyCode
-speedDecListening = false
-SpeedDecBtn.Text = "[ " .. speedDecKey.Name .. " ]"
-SpeedDecBtn.TextColor3 = C.textPri
-triggerAutoSave()
-end
-return
-end
-
-if speedIncListening and input.UserInputType == Enum.UserInputType.Keyboard then
-if input.KeyCode ~= Enum.KeyCode.Unknown then
-speedIncKey = input.KeyCode
-speedIncListening = false
-SpeedIncBtn.Text = "[ " .. speedIncKey.Name .. " ]"
-SpeedIncBtn.TextColor3 = C.textPri
-triggerAutoSave()
-end
-return
-end
-
-if not processed and input.UserInputType == Enum.UserInputType.Keyboard then
-if input.KeyCode == speedDecKey then
-speedDecHeld = true
-speedDecFirstPress = tick()
-speedDecLastIncrement = tick()
-pcall(function()
-local char = LocalPlayer.Character
-if char and char:FindFirstChild("Humanoid") then
-char.Humanoid.WalkSpeed = math.max(16, char.Humanoid.WalkSpeed - 1)
-end
-end)
-end
-
-if input.KeyCode == speedIncKey then
-speedIncHeld = true
-speedIncFirstPress = tick()
-speedIncLastIncrement = tick()
-pcall(function()
-local char = LocalPlayer.Character
-if char and char:FindFirstChild("Humanoid") then
-char.Humanoid.WalkSpeed = math.min(500, char.Humanoid.WalkSpeed + 1)
-end
-end)
-end
-
-if not isListeningForKeybind and input.UserInputType == Enum.UserInputType.Keyboard then
+if not processed and not isListeningForKeybind and input.UserInputType == Enum.UserInputType.Keyboard then
 if #activeKeybind == 2 then
 if (input.KeyCode == activeKeybind[2] and UserInputService:IsKeyDown(activeKeybind[1]))
 or (input.KeyCode == activeKeybind[1] and UserInputService:IsKeyDown(activeKeybind[2])) then
@@ -2674,51 +2583,141 @@ elseif PillUI.Visible then expandFromPill() end
 end
 end
 end
-end
-end)
-
-local speedKeybindConn
-speedKeybindConn = UserInputService.InputEnded:Connect(function(input)
-if not Gui or not Gui.Parent then speedKeybindConn:Disconnect(); return end
-if input.UserInputType == Enum.UserInputType.Keyboard then
-if input.KeyCode == speedDecKey then
-speedDecHeld = false
-end
-if input.KeyCode == speedIncKey then
-speedIncHeld = false
-end
-end
-end)
-
-task.spawn(function()
-while true do
-task.wait(0.08)
-local now = tick()
-if speedDecHeld then
-local held = now - speedDecFirstPress
-if held > 0.4 and (now - speedDecLastIncrement) >= 0.08 then
-speedDecLastIncrement = now
-pcall(function()
-local char = LocalPlayer.Character
-if char and char:FindFirstChild("Humanoid") then
-char.Humanoid.WalkSpeed = math.max(16, char.Humanoid.WalkSpeed - 1)
-end
-end)
-end
-end
-if speedIncHeld then
-local held = now - speedIncFirstPress
-if held > 0.4 and (now - speedIncLastIncrement) >= 0.08 then
-speedIncLastIncrement = now
-pcall(function()
-local char = LocalPlayer.Character
-if char and char:FindFirstChild("Humanoid") then
-char.Humanoid.WalkSpeed = math.min(500, char.Humanoid.WalkSpeed + 1)
-end
-end)
-end
-end
-end
 end)
 
 print("[UNScripts] Loaded - All features integrated")
+
+-- ============================================================
+-- EXTENSION: MANUAL TEXT INPUTS & RESPAWN PERSISTENCE
+-- (Paste this at the very bottom of your UNScripts file)
+-- ============================================================
+
+-- 1. Ensure the Main UI doesn't hide our new side-panel
+if Main then Main.ClipsDescendants = false end
+
+-- 2. Create the Override Panel (Attached to the left side of Main)
+local OverridePanel = Make("Frame", {
+    Size = UDim2.new(0, 150, 0, 170),
+    Position = UDim2.new(0, -160, 0, 0), -- 160 pixels to the left of the Main menu
+    BackgroundColor3 = C.bg,
+    BackgroundTransparency = uiTransparency or 0.25,
+    BorderSizePixel = 0,
+    Parent = Main
+})
+Make("UICorner", {CornerRadius = UDim.new(0, 16), Parent = OverridePanel})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.5, Parent = OverridePanel})
+
+-- Title
+Make("TextLabel", {
+    Size = UDim2.new(1, 0, 0, 30), Position = UDim2.new(0, 0, 0, 5),
+    BackgroundTransparency = 1, Text = "MANUAL INPUTS",
+    TextColor3 = C.textPri, TextSize = 12, Font = Enum.Font.GothamBold, Parent = OverridePanel
+})
+Make("Frame", {
+    Size = UDim2.new(1, -20, 0, 1), Position = UDim2.new(0, 10, 0, 35),
+    BackgroundColor3 = C.border, BorderSizePixel = 0, Parent = OverridePanel
+})
+
+local activeOverrides = {
+    WalkSpeed = {Value = 16, Enabled = false},
+    JumpPower = {Value = 50, Enabled = false},
+    FOV = {Value = 70, Enabled = false}
+}
+
+-- 3. Helper to create a Text-Input row
+local function createOverrideRow(name, yPos, dictKey, defaultVal, callback)
+    local row = Make("Frame", {
+        Size = UDim2.new(1, -20, 0, 30), Position = UDim2.new(0, 10, 0, yPos),
+        BackgroundColor3 = C.surfaceAlt, Parent = OverridePanel
+    })
+    Make("UICorner", {CornerRadius = UDim.new(0, 6), Parent = row})
+
+    -- Toggle Button
+    local toggleBtn = Make("TextButton", {
+        Size = UDim2.new(0, 20, 0, 20), Position = UDim2.new(0, 5, 0, 5),
+        BackgroundColor3 = C.toggle_off, Text = "", Parent = row
+    })
+    Make("UICorner", {CornerRadius = UDim.new(0, 4), Parent = toggleBtn})
+
+    -- Label
+    Make("TextLabel", {
+        Size = UDim2.new(0, 60, 0, 30), Position = UDim2.new(0, 32, 0, 0),
+        BackgroundTransparency = 1, Text = name,
+        TextColor3 = C.textPri, TextSize = 11, Font = Enum.Font.Gotham,
+        TextXAlignment = Enum.TextXAlignment.Left, Parent = row
+    })
+
+    -- TextBox for Manual Input
+    local input = Make("TextBox", {
+        Size = UDim2.new(0, 35, 0, 20), Position = UDim2.new(1, -40, 0, 5),
+        BackgroundColor3 = C.bg, TextColor3 = C.white,
+        Text = tostring(defaultVal), Font = Enum.Font.GothamBold, TextSize = 11, Parent = row
+    })
+    Make("UICorner", {CornerRadius = UDim.new(0, 4), Parent = input})
+
+    -- Logic for clicking the toggle button
+    toggleBtn.MouseButton1Click:Connect(function()
+        activeOverrides[dictKey].Enabled = not activeOverrides[dictKey].Enabled
+        toggleBtn.BackgroundColor3 = activeOverrides[dictKey].Enabled and C.toggle_on or C.toggle_off
+        if activeOverrides[dictKey].Enabled then
+            callback(activeOverrides[dictKey].Value)
+        end
+    end)
+
+    -- Logic for typing a number and hitting Enter (FocusLost)
+    input.FocusLost:Connect(function()
+        local num = tonumber(input.Text)
+        if num then
+            activeOverrides[dictKey].Value = num
+            if activeOverrides[dictKey].Enabled then
+                callback(num)
+            end
+        else
+            -- If they typed letters instead of numbers, revert to the old number
+            input.Text = tostring(activeOverrides[dictKey].Value) 
+        end
+    end)
+end
+
+-- 4. Define the Actions for each input
+createOverrideRow("Speed", 45, "WalkSpeed", 16, function(val)
+    if Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChild("Humanoid") then
+        Players.LocalPlayer.Character.Humanoid.WalkSpeed = val
+    end
+end)
+
+createOverrideRow("Jump", 80, "JumpPower", 50, function(val)
+    if Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChild("Humanoid") then
+        Players.LocalPlayer.Character.Humanoid.JumpPower = val
+    end
+end)
+
+createOverrideRow("FOV", 115, "FOV", 70, function(val)
+    if workspace.CurrentCamera then
+        workspace.CurrentCamera.FieldOfView = val
+    end
+end)
+
+-- 5. RESPAWN PERSISTENCE (Constantly re-applies when character dies/resets)
+Players.LocalPlayer.CharacterAdded:Connect(function(char)
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        -- Wait a brief moment to let the game finish loading the new character body
+        task.wait(0.2) 
+        if activeOverrides.WalkSpeed.Enabled then
+            hum.WalkSpeed = activeOverrides.WalkSpeed.Value
+        end
+        if activeOverrides.JumpPower.Enabled then
+            hum.JumpPower = activeOverrides.JumpPower.Value
+        end
+    end
+end)
+
+-- Background loop to enforce FOV (since games frequently overwrite FOV)
+task.spawn(function()
+    while task.wait(0.5) do
+        if activeOverrides.FOV.Enabled and workspace.CurrentCamera then
+            workspace.CurrentCamera.FieldOfView = activeOverrides.FOV.Value
+        end
+    end
+end)
