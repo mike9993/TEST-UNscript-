@@ -95,6 +95,8 @@ local cfgLightMode       = savedCfg.lightMode or false
 local cfgSaveInventory   = savedCfg.saveInventory or false
 local cfgSaveMode        = savedCfg.saveMode or "All"
 local cfgSliderFavs      = savedCfg.sliderFavs or {}
+local cfgSpeedUpKeyName    = savedCfg.speedUpKey or "Equals"
+local cfgSpeedDownKeyName  = savedCfg.speedDownKey or "Minus"
 
 local uiTransparency      = cfgTransparency
 local startupNotifEnabled = cfgNotifEnabled
@@ -110,6 +112,9 @@ keycodeFromName(cfgKeybind1Name),
 keycodeFromName(cfgKeybind2Name),
 }
 
+local activeSpeedUpKey   = keycodeFromName(cfgSpeedUpKeyName)
+local activeSpeedDownKey = keycodeFromName(cfgSpeedDownKeyName)
+
 local function triggerAutoSave()
 saveConfig({
 transparency  = uiTransparency,
@@ -121,7 +126,9 @@ isExpanded    = isExpanded,
     sliderFavs    = cfgSliderFavs,
     lightMode     = cfgLightMode,
     saveInventory = cfgSaveInventory,
-    saveMode      = cfgSaveMode
+    saveMode      = cfgSaveMode,
+    speedUpKey    = activeSpeedUpKey.Name,
+    speedDownKey  = activeSpeedDownKey.Name
 })
 end
 
@@ -310,6 +317,24 @@ local partState      = {}
 
 local originalToggles = {}
 local proxyToggles    = {}
+
+local speedUpHolding   = false
+local speedDownHolding = false
+local isListeningForSpeedUp   = false
+local isListeningForSpeedDown = false
+
+local function adjustWalkSpeed(delta)
+local current = 16
+pcall(function()
+current = LocalPlayer.Character.Humanoid.WalkSpeed
+end)
+local newSpeed = math.clamp(current + delta, 16, 500)
+pcall(function()
+LocalPlayer.Character.Humanoid.WalkSpeed = newSpeed
+end)
+cfgSliderFavs["Scripts_Movement_slider_WalkSpeed"] = newSpeed
+triggerAutoSave()
+end
 
 local function trackCurrentState()
 if not cfgSaveInventory then return end
@@ -2113,6 +2138,36 @@ KeybindBtn.TextColor3 = C.dot_yel
 end
 end)
 
+local _, SpeedSecContent = makeSetSection(ScrollShortcuts, "WalkSpeed Shortcut", PART_H * 2 + 5, true)
+
+local SpeedUpPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = SpeedSecContent })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = SpeedUpPill})
+Make("TextLabel", { Size = ud2(0,120,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Speed +1 Key", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SpeedUpPill })
+local SpeedUpKeyBtn = Make("TextButton", { Size = ud2(0,110,0,22), Position = ud2(1,-145,0,5), BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1, Text = "[ " .. activeSpeedUpKey.Name .. " ]", TextColor3 = C.textPri, TextSize = 11, Font = bold, Parent = SpeedUpPill })
+Make("UICorner", {CornerRadius = ud(0,4), Parent = SpeedUpKeyBtn})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = SpeedUpKeyBtn})
+SpeedUpKeyBtn.MouseButton1Click:Connect(function()
+if not isListeningForSpeedUp and not isListeningForKeybind then
+isListeningForSpeedUp = true
+SpeedUpKeyBtn.Text = "[ Press Key ]"
+SpeedUpKeyBtn.TextColor3 = C.dot_yel
+end
+end)
+
+local SpeedDownPill = Make("Frame", { Size = ud2(1,-8,0,PART_H), Position = ud2(0,0,0,PART_H + 2), BackgroundColor3 = C.part_bg, BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = SpeedSecContent })
+Make("UICorner", {CornerRadius = ud(1,0), Parent = SpeedDownPill})
+Make("TextLabel", { Size = ud2(0,120,1,0), Position = ud2(0,14,0,0), BackgroundTransparency = 1, Text = "Speed -1 Key", TextColor3 = C.textPri, TextSize = 11, Font = reg, TextXAlignment = Enum.TextXAlignment.Left, Parent = SpeedDownPill })
+local SpeedDownKeyBtn = Make("TextButton", { Size = ud2(0,110,0,22), Position = ud2(1,-145,0,5), BackgroundColor3 = C.surfaceAlt, BackgroundTransparency = 0.1, Text = "[ " .. activeSpeedDownKey.Name .. " ]", TextColor3 = C.textPri, TextSize = 11, Font = bold, Parent = SpeedDownPill })
+Make("UICorner", {CornerRadius = ud(0,4), Parent = SpeedDownKeyBtn})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.4, Parent = SpeedDownKeyBtn})
+SpeedDownKeyBtn.MouseButton1Click:Connect(function()
+if not isListeningForSpeedDown and not isListeningForKeybind then
+isListeningForSpeedDown = true
+SpeedDownKeyBtn.Text = "[ Press Key ]"
+SpeedDownKeyBtn.TextColor3 = C.dot_yel
+end
+end)
+
 local themeContentH = 90
 local _, ThemeSecContent = makeSetSection(ScrollThemes, "Appearance", themeContentH, true)
 
@@ -2551,11 +2606,77 @@ task.spawn(function() task.wait() pcall(function() o:Destroy() end) end)
 end
 end)
 
+-- Speed Key Shortcuts
+local speedConn
+speedConn = UserInputService.InputBegan:Connect(function(input, processed)
+if not Gui or not Gui.Parent then speedConn:Disconnect(); return end
+if UninstallOverlay.Visible then return end
+if isListeningForKeybind then return end
+
+if isListeningForSpeedUp and input.UserInputType == Enum.UserInputType.Keyboard then
+if input.KeyCode ~= Enum.KeyCode.Unknown then
+activeSpeedUpKey = input.KeyCode
+isListeningForSpeedUp = false
+SpeedUpKeyBtn.Text = "[ " .. input.KeyCode.Name .. " ]"
+SpeedUpKeyBtn.TextColor3 = C.textPri
+triggerAutoSave()
+end
+return
+end
+
+if isListeningForSpeedDown and input.UserInputType == Enum.UserInputType.Keyboard then
+if input.KeyCode ~= Enum.KeyCode.Unknown then
+activeSpeedDownKey = input.KeyCode
+isListeningForSpeedDown = false
+SpeedDownKeyBtn.Text = "[ " .. input.KeyCode.Name .. " ]"
+SpeedDownKeyBtn.TextColor3 = C.textPri
+triggerAutoSave()
+end
+return
+end
+
+if not processed and input.UserInputType == Enum.UserInputType.Keyboard then
+if input.KeyCode == activeSpeedUpKey and not UserInputService:IsKeyDown(activeSpeedDownKey) then
+speedUpHolding = true
+adjustWalkSpeed(1)
+task.spawn(function()
+task.wait(0.4)
+while speedUpHolding do
+adjustWalkSpeed(1)
+task.wait(0.08)
+end
+end)
+elseif input.KeyCode == activeSpeedDownKey and not UserInputService:IsKeyDown(activeSpeedUpKey) then
+speedDownHolding = true
+adjustWalkSpeed(-1)
+task.spawn(function()
+task.wait(0.4)
+while speedDownHolding do
+adjustWalkSpeed(-1)
+task.wait(0.08)
+end
+end)
+end
+end
+end)
+
+local speedEndConn
+speedEndConn = UserInputService.InputEnded:Connect(function(input)
+if input.UserInputType == Enum.UserInputType.Keyboard then
+if input.KeyCode == activeSpeedUpKey then
+speedUpHolding = false
+elseif input.KeyCode == activeSpeedDownKey then
+speedDownHolding = false
+end
+end
+end)
+
 -- Keybind
 local keybindConn
 keybindConn = UserInputService.InputBegan:Connect(function(input, processed)
 if not Gui or not Gui.Parent then keybindConn:Disconnect(); return end
 if UninstallOverlay.Visible then return end
+if isListeningForSpeedUp or isListeningForSpeedDown then return end
 
 if isListeningForKeybind and input.UserInputType == Enum.UserInputType.Keyboard then
 if input.KeyCode ~= Enum.KeyCode.Unknown then
