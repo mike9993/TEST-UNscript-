@@ -95,8 +95,8 @@ local cfgLightMode       = savedCfg.lightMode or false
 local cfgSaveInventory   = savedCfg.saveInventory or false
 local cfgSaveMode        = savedCfg.saveMode or "All"
 local cfgSliderFavs      = savedCfg.sliderFavs or {}
-local cfgSpeedDecKey     = savedCfg.speedDecKey or "Minus"
-local cfgSpeedIncKey     = savedCfg.speedIncKey or "Equal"
+local cfgSpeedDecKeyName = savedCfg.speedDecKey or "Minus"
+local cfgSpeedIncKeyName = savedCfg.speedIncKey or "Equal"
 
 local uiTransparency      = cfgTransparency
 local startupNotifEnabled = cfgNotifEnabled
@@ -111,6 +111,9 @@ local activeKeybind = {
 keycodeFromName(cfgKeybind1Name),
 keycodeFromName(cfgKeybind2Name),
 }
+
+local speedDecKey = keycodeFromName(cfgSpeedDecKeyName)
+local speedIncKey = keycodeFromName(cfgSpeedIncKeyName)
 
 local function triggerAutoSave()
 saveConfig({
@@ -834,8 +837,6 @@ local espNames = false
 local espDistance = false
 local espChams = false
 
-local speedDecKey = keycodeFromName(cfgSpeedDecKey)
-local speedIncKey = keycodeFromName(cfgSpeedIncKey)
 local speedDecHeld = false
 local speedIncHeld = false
 local speedDecFirstPress = 0
