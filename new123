@@ -2586,3 +2586,137 @@ end
 end)
 
 print("[UNScripts] Loaded - All features integrated")
+-- ============================================================
+-- EXTENSION: MANUAL TEXT INPUTS & RESPAWN PERSISTENCE
+-- (Paste this at the very bottom of your UNScripts file)
+-- ============================================================
+
+-- 1. Ensure the Main UI doesn't hide our new side-panel
+if Main then Main.ClipsDescendants = false end
+
+-- 2. Create the Override Panel (Attached to the left side of Main)
+local OverridePanel = Make("Frame", {
+    Size = UDim2.new(0, 150, 0, 170),
+    Position = UDim2.new(0, -160, 0, 0), -- 160 pixels to the left of the Main menu
+    BackgroundColor3 = C.bg,
+    BackgroundTransparency = uiTransparency or 0.25,
+    BorderSizePixel = 0,
+    Parent = Main
+})
+Make("UICorner", {CornerRadius = UDim.new(0, 16), Parent = OverridePanel})
+Make("UIStroke", {Color = C.border, Thickness = 1, Transparency = 0.5, Parent = OverridePanel})
+
+-- Title
+Make("TextLabel", {
+    Size = UDim2.new(1, 0, 0, 30), Position = UDim2.new(0, 0, 0, 5),
+    BackgroundTransparency = 1, Text = "MANUAL INPUTS",
+    TextColor3 = C.textPri, TextSize = 12, Font = Enum.Font.GothamBold, Parent = OverridePanel
+})
+Make("Frame", {
+    Size = UDim2.new(1, -20, 0, 1), Position = UDim2.new(0, 10, 0, 35),
+    BackgroundColor3 = C.border, BorderSizePixel = 0, Parent = OverridePanel
+})
+
+local activeOverrides = {
+    WalkSpeed = {Value = 16, Enabled = false},
+    JumpPower = {Value = 50, Enabled = false},
+    FOV = {Value = 70, Enabled = false}
+}
+
+-- 3. Helper to create a Text-Input row
+local function createOverrideRow(name, yPos, dictKey, defaultVal, callback)
+    local row = Make("Frame", {
+        Size = UDim2.new(1, -20, 0, 30), Position = UDim2.new(0, 10, 0, yPos),
+        BackgroundColor3 = C.surfaceAlt, Parent = OverridePanel
+    })
+    Make("UICorner", {CornerRadius = UDim.new(0, 6), Parent = row})
+
+    -- Toggle Button
+    local toggleBtn = Make("TextButton", {
+        Size = UDim2.new(0, 20, 0, 20), Position = UDim2.new(0, 5, 0, 5),
+        BackgroundColor3 = C.toggle_off, Text = "", Parent = row
+    })
+    Make("UICorner", {CornerRadius = UDim.new(0, 4), Parent = toggleBtn})
+
+    -- Label
+    Make("TextLabel", {
+        Size = UDim2.new(0, 60, 0, 30), Position = UDim2.new(0, 32, 0, 0),
+        BackgroundTransparency = 1, Text = name,
+        TextColor3 = C.textPri, TextSize = 11, Font = Enum.Font.Gotham,
+        TextXAlignment = Enum.TextXAlignment.Left, Parent = row
+    })
+
+    -- TextBox for Manual Input
+    local input = Make("TextBox", {
+        Size = UDim2.new(0, 35, 0, 20), Position = UDim2.new(1, -40, 0, 5),
+        BackgroundColor3 = C.bg, TextColor3 = C.white,
+        Text = tostring(defaultVal), Font = Enum.Font.GothamBold, TextSize = 11, Parent = row
+    })
+    Make("UICorner", {CornerRadius = UDim.new(0, 4), Parent = input})
+
+    -- Logic for clicking the toggle button
+    toggleBtn.MouseButton1Click:Connect(function()
+        activeOverrides[dictKey].Enabled = not activeOverrides[dictKey].Enabled
+        toggleBtn.BackgroundColor3 = activeOverrides[dictKey].Enabled and C.toggle_on or C.toggle_off
+        if activeOverrides[dictKey].Enabled then
+            callback(activeOverrides[dictKey].Value)
+        end
+    end)
+
+    -- Logic for typing a number and hitting Enter (FocusLost)
+    input.FocusLost:Connect(function()
+        local num = tonumber(input.Text)
+        if num then
+            activeOverrides[dictKey].Value = num
+            if activeOverrides[dictKey].Enabled then
+                callback(num)
+            end
+        else
+            -- If they typed letters instead of numbers, revert to the old number
+            input.Text = tostring(activeOverrides[dictKey].Value) 
+        end
+    end)
+end
+
+-- 4. Define the Actions for each input
+createOverrideRow("Speed", 45, "WalkSpeed", 16, function(val)
+    if Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChild("Humanoid") then
+        Players.LocalPlayer.Character.Humanoid.WalkSpeed = val
+    end
+end)
+
+createOverrideRow("Jump", 80, "JumpPower", 50, function(val)
+    if Players.LocalPlayer.Character and Players.LocalPlayer.Character:FindFirstChild("Humanoid") then
+        Players.LocalPlayer.Character.Humanoid.JumpPower = val
+    end
+end)
+
+createOverrideRow("FOV", 115, "FOV", 70, function(val)
+    if workspace.CurrentCamera then
+        workspace.CurrentCamera.FieldOfView = val
+    end
+end)
+
+-- 5. RESPAWN PERSISTENCE (Constantly re-applies when character dies/resets)
+Players.LocalPlayer.CharacterAdded:Connect(function(char)
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        -- Wait a brief moment to let the game finish loading the new character body
+        task.wait(0.2) 
+        if activeOverrides.WalkSpeed.Enabled then
+            hum.WalkSpeed = activeOverrides.WalkSpeed.Value
+        end
+        if activeOverrides.JumpPower.Enabled then
+            hum.JumpPower = activeOverrides.JumpPower.Value
+        end
+    end
+end)
+
+-- Background loop to enforce FOV (since games frequently overwrite FOV)
+task.spawn(function()
+    while task.wait(0.5) do
+        if activeOverrides.FOV.Enabled and workspace.CurrentCamera then
+            workspace.CurrentCamera.FieldOfView = activeOverrides.FOV.Value
+        end
+    end
+end)
