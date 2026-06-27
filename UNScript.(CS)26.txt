@@ -1352,9 +1352,16 @@ end
 
 local hubSections = {
 {
-name = "Game",
+name = "Games",
 scripts = {
 {name = "MVSD", url = "https://www.vaporscripts.xyz/VaporMvsd", wrapLoad = true},
+}
+},
+{
+name = "MM2",
+scripts = {
+{name = "vertex", url = "https://raw.smokingscripts.org/vertex.lua", wrapLoad = true},
+{name = "Vapor", url = "https://www.vaporscripts.xyz/VaporMM2", wrapLoad = true},
 }
 },
 {
@@ -1365,7 +1372,7 @@ scripts = {
 {name = "Fling", url = "https://glot.io/snippets/h86gnsdgud/raw/FlingGui.lua", wrapLoad = false},
         {name = "Infinite-Yield", url = "https://raw.githubusercontent.com/mike9993/Infinite-Yield-FE/refs/heads/main/Infinite%20Yield%20FE.lua", wrapLoad = false},
         {name = "Emotes/Animations", url = "https://raw.githubusercontent.com/7yd7/Hub/refs/heads/Branch/GUIS/Emotes.lua", wrapLoad = false},
-		{name = "Mois7", url = "https://mois7.xyz/loader", wrapLoad = true},
+        {name = "mois7", url = "https://api.luarmor.net/files/v4/loaders/c146e7169df99db2afa5052b177dd747.lua", wrapLoad = true},
 }
 },
 {
@@ -1374,6 +1381,7 @@ scripts = {
 {name = "UNScripts fling", url = "https://raw.githubusercontent.com/mike9993/UNscript-fling-/refs/heads/main/FlingScript.1.lua", wrapLoad = false},
 {name = "UNTapFling", url = "https://raw.githubusercontent.com/mike9993/TapFling/refs/heads/main/FlingScriptUN.3.txt", wrapLoad = false},
 {name = "Advanced Walk Speed", url = "https://raw.githubusercontent.com/mike9993/Advance-walk-speed./refs/heads/main/AdvancedWalkSpeed%20v7.lua", wrapLoad = true},
+{name = "Advanced Invis", url = "https://raw.githubusercontent.com/mike9993/UN-Invis/refs/heads/main/advanced_invis.lua", wrapLoad = true},
 }
 },
 }
