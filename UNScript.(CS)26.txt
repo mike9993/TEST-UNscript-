@@ -1353,15 +1353,20 @@ end
 local hubSections = {
 {
 name = "Games",
-scripts = {
-{name = "MVSD", url = "https://www.vaporscripts.xyz/VaporMvsd", wrapLoad = true},
-}
-},
+subcategories = {
 {
 name = "MM2",
 scripts = {
 {name = "vertex", url = "https://raw.smokingscripts.org/vertex.lua", wrapLoad = true},
 {name = "Vapor", url = "https://www.vaporscripts.xyz/VaporMM2", wrapLoad = true},
+}
+},
+{
+name = "MVSD",
+scripts = {
+{name = "MVSD", url = "https://www.vaporscripts.xyz/VaporMvsd", wrapLoad = true},
+}
+},
 }
 },
 {
@@ -1622,7 +1627,7 @@ end
 CollapseAllBtn.Visible = (n > 1)
 end
 
-local function makeSection(sectionName, parentContainer, tabKey, isFavSection, isActiveSection, hubScripts)
+local function makeSection(sectionName, parentContainer, tabKey, isFavSection, isActiveSection, hubScripts, hubSubcategories)
 local wrapper = Make("Frame", {
 Size = ud2(1,-16,0,SECTION_H), BackgroundTransparency = 1,
 ClipsDescendants = true, Parent = parentContainer,
@@ -1680,6 +1685,61 @@ if isActiveSection then
 activeSectionObj = obj
 elseif isFavSection then
 favSectionObj = obj
+elseif hubSubcategories then
+for _, subcat in ipairs(hubSubcategories) do
+local subWrapper = Make("Frame", {
+Size = ud2(1,-8,0,SECTION_H), BackgroundTransparency = 1,
+ClipsDescendants = true, Parent = content,
+})
+local subHeader = Make("Frame", {
+Size = ud2(1,0,0,SECTION_H), BackgroundColor3 = C.surfaceAlt,
+BackgroundTransparency = 0.3, BorderSizePixel = 0, Parent = subWrapper,
+})
+Make("UICorner", {CornerRadius = ud(1,0), Parent = subHeader})
+local subArrow = Make("TextLabel", {
+Size = ud2(0,28,1,0), Position = ud2(0,10,0,0),
+BackgroundTransparency = 1, Text = "+", TextColor3 = C.textSec,
+TextSize = 18, Font = bold, Parent = subHeader,
+})
+Make("TextLabel", {
+Size = ud2(1,-50,1,0), Position = ud2(0,32,0,0),
+BackgroundTransparency = 1, Text = subcat.name,
+TextColor3 = C.textPri, TextSize = 11, Font = bold,
+TextXAlignment = Enum.TextXAlignment.Left, Parent = subHeader,
+})
+local subContent = Make("Frame", {
+Size = ud2(1,0,0,0), Position = ud2(0,0,0,SECTION_H+2),
+BackgroundTransparency = 1, ClipsDescendants = true, Parent = subWrapper,
+})
+Make("UIListLayout", {SortOrder = Enum.SortOrder.LayoutOrder, Padding = ud(0,4), Parent = subContent})
+for i, script in ipairs(subcat.scripts) do
+local uid = tabKey .. "_" .. sectionName .. "_" .. subcat.name .. "_" .. script.name
+createHubUI(subContent, script.name, uid, i, false, script.url)
+end
+local subIsOpen = false
+local subLayout = subContent:FindFirstChildOfClass("UIListLayout")
+local subH = subLayout and subLayout.AbsoluteContentSize.Y or 0
+subContent.Size = ud2(1,0,0,subH)
+subWrapper.Size = ud2(1,-8,0,SECTION_H + 2 + subH)
+local subBtn = Make("TextButton", {
+Size = ud2(1,0,1,0), BackgroundTransparency = 1, Text = "", Parent = subHeader,
+})
+subBtn.MouseButton1Click:Connect(function()
+subIsOpen = not subIsOpen
+subArrow.Text = subIsOpen and "-" or "+"
+if subIsOpen then
+local layout2 = subContent:FindFirstChildOfClass("UIListLayout")
+local h2 = layout2 and layout2.AbsoluteContentSize.Y or 0
+subContent.Size = ud2(1,0,0,h2)
+subWrapper.Size = ud2(1,-8,0,SECTION_H + 2 + h2)
+else
+TweenService:Create(subWrapper, sectionTween, {
+Size = ud2(1,-8,0,SECTION_H)
+}):Play()
+end
+end)
+end
+obj.resizeToContent()
 elseif hubScripts then
 for i, script in ipairs(hubScripts) do
 local uid = tabKey .. "_" .. sectionName .. "_" .. script.name
@@ -1940,7 +2000,7 @@ makeSection(sName, k2k1Container, "Scripts", false, false)
 end
 
 for _, hubSec in ipairs(hubSections) do
-makeSection(hubSec.name, k2Container, "Hubs", false, false, hubSec.scripts)
+makeSection(hubSec.name, k2Container, "Hubs", false, false, hubSec.scripts, hubSec.subcategories)
 end
 
 rebuildFavorites()
