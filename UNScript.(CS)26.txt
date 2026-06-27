@@ -1365,7 +1365,7 @@ scripts = {
 {name = "Fling", url = "https://glot.io/snippets/h86gnsdgud/raw/FlingGui.lua", wrapLoad = false},
         {name = "Infinite-Yield", url = "https://raw.githubusercontent.com/mike9993/Infinite-Yield-FE/refs/heads/main/Infinite%20Yield%20FE.lua", wrapLoad = false},
         {name = "Emotes/Animations", url = "https://raw.githubusercontent.com/7yd7/Hub/refs/heads/Branch/GUIS/Emotes.lua", wrapLoad = false},
-		{name = "Mois7", url = "https://mois7.xyz/loader", wrapLoad = false},
+		{name = "Mois7", url = "https://mois7.xyz/loader", wrapLoad = true},
 }
 },
 {
